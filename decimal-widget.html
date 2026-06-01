@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Децимальные номера</title>
+<script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #F7F6F2;
+    --surface: #FFFFFF;
+    --surface2: #F0EEE8;
+    --border: #E2DFD6;
+    --border2: #C8C4B8;
+    --text: #1A1916;
+    --text2: #6B6860;
+    --text3: #9B9890;
+    --accent: #2D5BE3;
+    --accent-bg: #EBF0FC;
+    --accent2: #0F6E56;
+    --accent2-bg: #E1F5EE;
+    --warn: #BA7517;
+    --warn-bg: #FAEEDA;
+    --red: #A32D2D;
+    --red-bg: #FCEBEB;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+    --r: 6px;
+    --r2: 10px;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* ─── LAYOUT ─────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: 48px 1fr;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .topbar {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 10px;
+  }
+
+  .logo {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  .search-wrap {
+    flex: 1;
+    position: relative;
+    max-width: 420px;
+  }
+  .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text3);
+    pointer-events: none;
+  }
+  .search-input {
+    width: 100%;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface2);
+    padding: 0 10px 0 32px;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .search-input:focus {
+    border-color: var(--accent);
+    background: var(--surface);
+  }
+  .search-input::placeholder { color: var(--text3); }
+
+  .search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%; transform: translateY(-50%);
+    cursor: pointer;
+    color: var(--text3);
+    display: none;
+    background: none; border: none; padding: 2px;
+  }
+  .search-clear.visible { display: flex; }
+
+  /* ─── SIDEBAR ────────────────────────── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px 0;
+  }
+
+  .sidebar-section { margin-bottom: 16px; }
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text3);
+    padding: 0 14px 6px;
+  }
+
+  .fav-item, .recent-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px;
+    cursor: pointer;
+    border-radius: 0;
+    transition: background 0.1s;
+  }
+  .fav-item:hover, .recent-item:hover { background: var(--surface2); }
+  .fav-item.active, .recent-item.active { background: var(--accent-bg); }
+
+  .fav-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .fav-name { font-size: 12px; color: var(--text); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fav-code { font-family: var(--mono); font-size: 10px; color: var(--text3); }
+
+  .recent-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    flex-shrink: 0;
+  }
+  .recent-name { font-size: 12px; color: var(--text2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .sidebar-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 8px 14px;
+  }
+
+  /* ─── MAIN ───────────────────────────── */
+  .main {
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* ─── PANELS ─────────────────────────── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text2);
+  }
+  .panel-body { padding: 12px 14px; }
+
+  /* ─── SEARCH RESULTS ─────────────────── */
+  .search-panel { display: none; }
+  .search-panel.active { display: block; }
+
+  .result-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    border-radius: var(--r);
+    padding: 8px 8px;
+    margin: 0 -8px;
+  }
+  .result-item:last-child { border-bottom: none; }
+  .result-item:hover { background: var(--accent-bg); }
+  .result-item.selected { background: var(--accent-bg); border-left: 2px solid var(--accent); }
+
+  .result-code {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--accent-bg);
+    border-radius: 4px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+    min-width: 110px;
+    text-align: center;
+  }
+  .result-name { font-size: 13px; color: var(--text); flex: 1; }
+  .result-cat { font-size: 11px; color: var(--text3); }
+
+  /* ─── RELATIONS ──────────────────────── */
+  .relation-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .rel-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: var(--r);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .rel-item:hover { background: var(--surface2); }
+  .rel-item.current {
+    background: var(--accent-bg);
+    border: 1px solid var(--accent);
+  }
+  .rel-item.parent { border-left: 3px solid var(--warn); background: var(--warn-bg); }
+  .rel-item.child { border-left: 3px solid var(--accent2); background: var(--accent2-bg); margin-left: 20px; }
+  .rel-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; width: 54px; }
+  .rel-code { font-family: var(--mono); font-size: 11px; color: var(--text); }
+  .rel-name { font-size: 12px; color: var(--text2); flex: 1; }
+
+  /* ─── CATEGORY PICKER ────────────────── */
+  .browse-panel { }
+  .cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 8px;
+  }
+  .cat-card {
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    padding: 10px 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .cat-card:hover { border-color: var(--accent); background: var(--accent-bg); transform: translateY(-1px); }
+  .cat-card.selected { border-color: var(--accent); background: var(--accent-bg); }
+  .cat-icon {
+    width: 36px; height: 36px;
+    border-radius: var(--r);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .cat-name { font-size: 10px; color: var(--text2); line-height: 1.3; text-align: center; }
+  .cat-code { font-family: var(--mono); font-size: 9px; color: var(--text3); }
+
+  /* subcategory drill */
+  .sub-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .sub-card {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 7px 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--surface);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .sub-card:hover { border-color: var(--accent); background: var(--accent-bg); }
+  .sub-card.selected { border-color: var(--accent); background: var(--accent-bg); }
+  .sub-card-code { font-family: var(--mono); font-size: 10px; color: var(--accent); }
+  .sub-card-name { font-size: 11px; color: var(--text); }
+
+  /* breadcrumb row */
+  .breadcrumb {
+    display: flex; align-items: center; gap: 4px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .bc-item {
+    font-size: 11px; color: var(--text2);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .bc-item:hover { background: var(--surface2); }
+  .bc-item.active { color: var(--text); font-weight: 500; cursor: default; }
+  .bc-sep { color: var(--text3); font-size: 11px; }
+
+  /* ─── DECIMAL BUILDER ─────────────────── */
+  .builder-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .dec-display {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .dec-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); }
+  .dec-code {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.05em;
+  }
+  .dec-code span { color: var(--border2); }
+  .dec-code.complete span { color: var(--text); }
+  .dec-parts {
+    display: flex; gap: 4px; flex-wrap: wrap;
+  }
+  .dec-part {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: var(--mono);
+  }
+  .dec-part.filled { background: var(--accent-bg); color: var(--accent); }
+  .dec-part.empty { background: var(--surface2); color: var(--text3); border: 1px dashed var(--border2); }
+
+  .next-display {
+    background: var(--accent2-bg);
+    border: 1px solid var(--accent2);
+    border-radius: var(--r);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .next-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent2); }
+  .next-code {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--accent2);
+    letter-spacing: 0.05em;
+  }
+  .next-hint { font-size: 11px; color: var(--text3); }
+
+  .add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--r);
+    padding: 10px 18px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    margin-top: 10px;
+    width: 100%;
+  }
+  .add-btn:hover { opacity: 0.88; }
+  .add-btn:active { transform: scale(0.98); }
+  .add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* selected component structure */
+  .struct-panel { }
+  .struct-nav {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+  }
+  .struct-nav-btn {
+    display: flex; align-items: center; gap: 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface2);
+    color: var(--text2);
+    font-size: 11px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: background 0.1s;
+  }
+  .struct-nav-btn:hover { background: var(--border); }
+  .struct-nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* ─── STATUS BAR ─────────────────────── */
+  .statusbar {
+    grid-column: 1 / -1;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    height: 24px;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.04em;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent2);
+    flex-shrink: 0;
+  }
+  .status-dot.disconnected { background: var(--red); }
+
+  /* ─── MISC ───────────────────────────── */
+  .empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 8px; padding: 28px 0; color: var(--text3); font-size: 12px; text-align: center;
+  }
+  .empty svg { opacity: 0.3; }
+
+  .tag {
+    display: inline-flex; align-items: center;
+    font-family: var(--mono); font-size: 10px;
+    padding: 1px 6px; border-radius: 3px;
+  }
+  .tag-blue { background: var(--accent-bg); color: var(--accent); }
+  .tag-green { background: var(--accent2-bg); color: var(--accent2); }
+  .tag-warn { background: var(--warn-bg); color: var(--warn); }
+
+  .level-tabs {
+    display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .level-tab {
+    font-size: 11px; padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    cursor: pointer;
+    color: var(--text2);
+    background: var(--surface);
+    transition: all 0.1s;
+  }
+  .level-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <span class="logo">ДН / Реестр</span>
+    <div class="search-wrap">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input class="search-input" id="searchInput" placeholder="Поиск по наименованию, номеру, применяемости…" autocomplete="off">
+      <button class="search-clear" id="searchClear" onclick="clearSearch()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="connStatus" style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3);flex-shrink:0">
+      <div class="status-dot disconnected" id="connDot"></div>
+      <span id="connLabel">Ожидание Grist…</span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">⭐ Избранное</div>
+      <div id="favList"><div class="empty" style="padding:8px 14px;font-size:11px;color:var(--text3);">Нет избранного</div></div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">🕐 Последние</div>
+      <div id="recentList"><div style="padding:8px 14px;font-size:11px;color:var(--text3);">—</div></div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main" id="mainContent">
+
+    <!-- SEARCH RESULTS (shown when searching) -->
+    <div class="panel search-panel" id="searchPanel">
+      <div class="panel-head">
+        <span class="panel-title" id="searchPanelTitle">Результаты поиска</span>
+      </div>
+      <div class="panel-body">
+        <div id="searchResults"></div>
+      </div>
+    </div>
+
+    <!-- RELATED (shown when result selected) -->
+    <div class="panel search-panel" id="relPanel">
+      <div class="panel-head">
+        <span class="panel-title">Связи компонента</span>
+        <button class="struct-nav-btn" onclick="closeRelPanel()">✕ закрыть</button>
+      </div>
+      <div class="panel-body">
+        <div id="relContent"></div>
+      </div>
+    </div>
+
+    <!-- BROWSE + BUILDER (shown when not searching) -->
+    <div id="browseArea">
+
+      <!-- CATEGORY BROWSER -->
+      <div class="panel browse-panel">
+        <div class="panel-head">
+          <span class="panel-title">Подбор по категориям</span>
+          <div class="breadcrumb" id="browseBreadcrumb" style="margin:0"></div>
+        </div>
+        <div class="panel-body">
+          <div id="browseContent"></div>
+        </div>
+      </div>
+
+      <!-- DECIMAL BUILDER -->
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Формирование децимального номера</span>
+        </div>
+        <div class="panel-body">
+          <div class="builder-row">
+            <div class="dec-display">
+              <div class="dec-label">Формируемый номер</div>
+              <div class="dec-code" id="decCode">
+                <span>00</span>.<span>000</span>.<span>000</span>.<span>000</span>.<span>00</span>
+              </div>
+              <div class="dec-parts" id="decParts">
+                <span class="dec-part empty tag">Класс</span>
+                <span class="dec-part empty tag">Подкласс</span>
+                <span class="dec-part empty tag">Группа</span>
+                <span class="dec-part empty tag">Подгруппа</span>
+                <span class="dec-part empty tag">Вид</span>
+              </div>
+            </div>
+            <div class="next-display">
+              <div class="next-label">Следующий свободный</div>
+              <div class="next-code" id="nextCode">—</div>
+              <div class="next-hint" id="nextHint">Выберите все уровни</div>
+            </div>
+          </div>
+          <button class="add-btn" id="addBtn" disabled onclick="addRecord()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Зарегистрировать номер
+          </button>
+        </div>
+      </div>
+
+      <!-- SELECTED COMPONENT STRUCTURE -->
+      <div class="panel struct-panel" id="structPanel" style="display:none">
+        <div class="panel-head">
+          <span class="panel-title">Структура выбранного компонента</span>
+          <div style="display:flex;gap:6px">
+            <button class="struct-nav-btn" id="btnParent" onclick="navParent()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+              Выше
+            </button>
+            <button class="struct-nav-btn" id="btnChild" onclick="navChild()">
+              Ниже
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div id="structContent"></div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+/* ════════════════════════════════════════
+   STATE
+════════════════════════════════════════ */
+const state = {
+  records: [],          // all decimal number records from Grist
+  categories: [],       // category hierarchy
+  favorites: [],        // user favorites (stored in userPrefs)
+  recent: [],           // recently viewed
+  searchQuery: '',
+  selectedResult: null,
+  // browse selection
+  sel: { class: null, subclass: null, group: null, subgroup: null, kind: null },
+  // builder
+  builder: { class: null, subclass: null, group: null, subgroup: null, kind: null },
+  currentUser: null,
+  connected: false,
+};
+
+/* ════════════════════════════════════════
+   GRIST INTEGRATION
+════════════════════════════════════════ */
+const LEVELS = ['class','subclass','group','subgroup','kind'];
+const LEVEL_NAMES = { class:'Класс', subclass:'Подкласс', group:'Группа', subgroup:'Подгруппа', kind:'Вид' };
+const LEVEL_DIGITS = { class:2, subclass:3, group:3, subgroup:3, kind:2 };
+
+function initGrist() {
+  if (typeof grist === 'undefined') {
+    setConnStatus(false, 'Grist API не найден');
+    renderAll();
+    return;
+  }
+  grist.ready({
+    requiredAccess: 'full',
+    columns: [
+      { name: 'decimal_number', title: 'Децимальный номер', type: 'Text' },
+      { name: 'name', title: 'Наименование', type: 'Text' },
+      { name: 'class_code', title: 'Класс', type: 'Text' },
+      { name: 'subclass_code', title: 'Подкласс', type: 'Text' },
+      { name: 'group_code', title: 'Группа', type: 'Text' },
+      { name: 'subgroup_code', title: 'Подгруппа', type: 'Text' },
+      { name: 'kind_code', title: 'Вид', type: 'Text' },
+      { name: 'primary_usage', title: 'Первичное применение', type: 'Text' },
+      { name: 'applicability', title: 'Применяемость', type: 'Text' },
+      { name: 'category_icon', title: 'Иконка категории', type: 'Text' },
+    ]
+  });
+
+  grist.onRecords((records) => {
+    state.records = records;
+    setConnStatus(true, `${records.length} записей`);
+    buildCategoryTree();
+    renderAll();
+  });
+
+  grist.onOptions((options) => {
+    if (options && options.favorites) state.favorites = options.favorites;
+    if (options && options.recent) state.recent = options.recent;
+    renderSidebar();
+  });
+
+  try {
+    grist.getUserCursor().then(cursor => { state.currentUser = cursor; });
+  } catch(e) {}
+}
+
+function setConnStatus(ok, label) {
+  state.connected = ok;
+  document.getElementById('connDot').className = 'status-dot' + (ok ? '' : ' disconnected');
+  document.getElementById('connLabel').textContent = label;
+}
+
+/* Build nested category tree from flat records */
+function buildCategoryTree() {
+  const tree = {};
+  state.records.forEach(r => {
+    const cls = r.class_code || '00';
+    if (!tree[cls]) tree[cls] = { code: cls, name: r.class_name || '', icon: r.category_icon || '📦', children: {} };
+    const sub = r.subclass_code || '000';
+    if (!tree[cls].children[sub]) tree[cls].children[sub] = { code: sub, name: r.subclass_name || '', children: {} };
+    const grp = r.group_code || '000';
+    if (!tree[cls].children[sub].children[grp]) tree[cls].children[sub].children[grp] = { code: grp, name: r.group_name || '', children: {} };
+    const sgrp = r.subgroup_code || '000';
+    if (!tree[cls].children[sub].children[grp].children[sgrp]) tree[cls].children[sub].children[grp].children[sgrp] = { code: sgrp, name: r.subgroup_name || '', children: {} };
+  });
+  state.categoryTree = tree;
+}
+
+/* ════════════════════════════════════════
+   SEARCH
+════════════════════════════════════════ */
+document.getElementById('searchInput').addEventListener('input', function() {
+  state.searchQuery = this.value.trim();
+  document.getElementById('searchClear').className = 'search-clear' + (state.searchQuery ? ' visible' : '');
+  state.selectedResult = null;
+  render();
+});
+
+function clearSearch() {
+  document.getElementById('searchInput').value = '';
+  state.searchQuery = '';
+  state.selectedResult = null;
+  document.getElementById('searchClear').className = 'search-clear';
+  render();
+}
+
+function doSearch(q) {
+  const lq = q.toLowerCase();
+  return state.records.filter(r =>
+    (r.decimal_number||'').toLowerCase().includes(lq) ||
+    (r.name||'').toLowerCase().includes(lq) ||
+    (r.primary_usage||'').toLowerCase().includes(lq) ||
+    (r.applicability||'').toLowerCase().includes(lq)
+  ).slice(0, 40);
+}
+
+function selectResult(r) {
+  state.selectedResult = r;
+  addToRecent(r);
+  render();
+}
+
+function addToRecent(r) {
+  state.recent = [r, ...state.recent.filter(x => x.decimal_number !== r.decimal_number)].slice(0, 8);
+  renderSidebar();
+}
+
+/* ════════════════════════════════════════
+   RENDER
+════════════════════════════════════════ */
+function render() {
+  const searching = !!state.searchQuery;
+  document.getElementById('browseArea').style.display = searching ? 'none' : 'flex';
+  document.getElementById('browseArea').style.flexDirection = 'column';
+  document.getElementById('browseArea').style.gap = '14px';
+  document.getElementById('searchPanel').classList.toggle('active', searching);
+  document.getElementById('relPanel').classList.toggle('active', searching && !!state.selectedResult);
+
+  if (searching) {
+    renderSearchResults();
+    if (state.selectedResult) renderRelPanel(state.selectedResult);
+  } else {
+    renderBrowse();
+    renderBuilder();
+  }
+}
+
+function renderAll() {
+  renderSidebar();
+  render();
+}
+
+/* ── Sidebar ──────────────────────────── */
+function renderSidebar() {
+  const favEl = document.getElementById('favList');
+  const recEl = document.getElementById('recentList');
+
+  if (!state.favorites.length) {
+    favEl.innerHTML = `<div style="padding:6px 14px;font-size:11px;color:var(--text3)">Нет избранного</div>`;
+  } else {
+    favEl.innerHTML = state.favorites.map((f,i) => `
+      <div class="fav-item" onclick="goToRecord('${f.decimal_number}')">
+        <div class="fav-dot" style="background:${PALETTE[i % PALETTE.length]}"></div>
+        <span class="fav-name">${esc(f.name||f.decimal_number)}</span>
+        <span class="fav-code">${esc(f.decimal_number)}</span>
+      </div>`).join('');
+  }
+
+  if (!state.recent.length) {
+    recEl.innerHTML = `<div style="padding:6px 14px;font-size:11px;color:var(--text3)">—</div>`;
+  } else {
+    recEl.innerHTML = state.recent.map(r => `
+      <div class="recent-item" onclick="goToRecord('${r.decimal_number}')">
+        <span class="recent-badge">${esc(r.decimal_number)}</span>
+        <span class="recent-name">${esc(r.name||'—')}</span>
+      </div>`).join('');
+  }
+}
+
+/* ── Search results ───────────────────── */
+function renderSearchResults() {
+  const q = state.searchQuery;
+  const title = document.getElementById('searchPanelTitle');
+  const container = document.getElementById('searchResults');
+
+  if (!state.connected && !state.records.length) {
+    container.innerHTML = `<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21l-4.35-4.35M11 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16"/></svg><span>Нет данных от Grist</span></div>`;
+    title.textContent = 'Результаты поиска';
+    return;
+  }
+
+  const results = doSearch(q);
+  title.textContent = `Найдено: ${results.length}`;
+
+  if (!results.length) {
+    container.innerHTML = `<div class="empty"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 21l-4.35-4.35M11 6a8 8 0 1 0 0 16 8 8 0 0 0 0-16"/></svg><span>Ничего не найдено</span></div>`;
+    return;
+  }
+
+  container.innerHTML = results.map(r => `
+    <div class="result-item ${state.selectedResult && state.selectedResult.decimal_number === r.decimal_number ? 'selected':''}"
+         onclick='selectResult(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+      <span class="result-code">${esc(r.decimal_number||'—')}</span>
+      <div style="flex:1;min-width:0">
+        <div class="result-name">${highlight(r.name||'—', q)}</div>
+        ${r.primary_usage ? `<div class="result-cat">${highlight(r.primary_usage, q)}</div>` : ''}
+      </div>
+      ${r.class_code ? `<span class="tag tag-blue">${esc(r.class_code)}</span>` : ''}
+    </div>`).join('');
+}
+
+/* ── Rel panel ────────────────────────── */
+function renderRelPanel(r) {
+  const container = document.getElementById('relContent');
+  const siblings = state.records.filter(x =>
+    x.decimal_number !== r.decimal_number &&
+    x.class_code === r.class_code &&
+    x.subclass_code === r.subclass_code &&
+    x.group_code === r.group_code
+  ).slice(0, 6);
+  const parent = state.records.find(x =>
+    x.class_code === r.class_code &&
+    x.subclass_code === r.subclass_code &&
+    !x.group_code
+  );
+  const children = state.records.filter(x =>
+    x.class_code === r.class_code &&
+    x.subclass_code === r.subclass_code &&
+    x.group_code === r.group_code &&
+    x.subgroup_code && !x.kind_code &&
+    x.decimal_number !== r.decimal_number
+  ).slice(0, 6);
+
+  let html = `<div class="relation-tree">`;
+  if (parent) html += `<div class="rel-item parent" onclick='selectResult(${JSON.stringify(parent).replace(/'/g,"&#39;")})'><span class="rel-label">Родитель</span><span class="rel-code">${esc(parent.decimal_number||'')}</span><span class="rel-name">${esc(parent.name||'')}</span></div>`;
+  html += `<div class="rel-item current"><span class="rel-label">Текущий</span><span class="rel-code">${esc(r.decimal_number||'')}</span><span class="rel-name">${esc(r.name||'')}</span></div>`;
+  children.forEach(c => { html += `<div class="rel-item child" onclick='selectResult(${JSON.stringify(c).replace(/'/g,"&#39;")})'><span class="rel-label">Дочерний</span><span class="rel-code">${esc(c.decimal_number||'')}</span><span class="rel-name">${esc(c.name||'')}</span></div>`; });
+  if (siblings.length) {
+    html += `<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:6px 0 2px">Смежные в группе</div>`;
+    siblings.forEach(s => { html += `<div class="rel-item" onclick='selectResult(${JSON.stringify(s).replace(/'/g,"&#39;")})'><span class="rel-label">Смежный</span><span class="rel-code">${esc(s.decimal_number||'')}</span><span class="rel-name">${esc(s.name||'')}</span></div>`; });
+  }
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function closeRelPanel() {
+  state.selectedResult = null;
+  render();
+}
+
+/* ── Browse (category picker) ─────────── */
+const CAT_ICONS = ['⚙️','🔌','🛢️','🔧','💡','🖥️','🔩','📐','🧲','🌡️','⚡','🔬','🏗️','🚗','✈️','🚢'];
+const PALETTE = ['#2D5BE3','#0F6E56','#BA7517','#A32D2D','#7F77DD','#1D9E75','#D85A30','#3B6D11'];
+
+function renderBrowse() {
+  const container = document.getElementById('browseContent');
+  const bc = document.getElementById('browseBreadcrumb');
+  const sel = state.sel;
+
+  // breadcrumb
+  let bcHtml = `<span class="bc-item ${!sel.class?'active':''}" onclick="resetBrowse()">Все классы</span>`;
+  if (sel.class) {
+    bcHtml += `<span class="bc-sep">›</span><span class="bc-item ${sel.class&&!sel.subclass?'active':''}" onclick="browseLevel('class',null)">${sel.class}</span>`;
+  }
+  if (sel.subclass) {
+    bcHtml += `<span class="bc-sep">›</span><span class="bc-item ${sel.subclass&&!sel.group?'active':''}" onclick="browseLevel('subclass',null)">${sel.subclass}</span>`;
+  }
+  if (sel.group) {
+    bcHtml += `<span class="bc-sep">›</span><span class="bc-item active">${sel.group}</span>`;
+  }
+  bc.innerHTML = bcHtml;
+
+  // content
+  if (!sel.class) {
+    // show classes
+    const classes = Object.values(state.categoryTree || {});
+    if (!classes.length) {
+      container.innerHTML = `<div class="empty"><span>Нет данных — подключите Grist</span></div>`;
+      return;
+    }
+    container.innerHTML = `<div class="cat-grid">${classes.map((c,i) => `
+      <div class="cat-card ${sel.class===c.code?'selected':''}" onclick="browseSelect('class','${c.code}')">
+        <div class="cat-icon" style="background:${PALETTE[i%PALETTE.length]}22">${c.icon||CAT_ICONS[i%CAT_ICONS.length]}</div>
+        <div class="cat-name">${esc(c.name||'Класс '+c.code)}</div>
+        <div class="cat-code">${esc(c.code)}</div>
+      </div>`).join('')}</div>`;
+  } else if (!sel.subclass) {
+    const subs = Object.values((state.categoryTree[sel.class]||{}).children||{});
+    container.innerHTML = `<div class="sub-grid">${subs.map(s => `
+      <div class="sub-card ${sel.subclass===s.code?'selected':''}" onclick="browseSelect('subclass','${s.code}')">
+        <span class="sub-card-code">${esc(s.code)}</span>
+        <span class="sub-card-name">${esc(s.name||'Подкласс '+s.code)}</span>
+      </div>`).join('')}</div>`;
+  } else if (!sel.group) {
+    const grps = Object.values(((state.categoryTree[sel.class]||{}).children[sel.subclass]||{}).children||{});
+    container.innerHTML = `<div class="sub-grid">${grps.map(g => `
+      <div class="sub-card ${sel.group===g.code?'selected':''}" onclick="browseSelect('group','${g.code}')">
+        <span class="sub-card-code">${esc(g.code)}</span>
+        <span class="sub-card-name">${esc(g.name||'Группа '+g.code)}</span>
+      </div>`).join('')}</div>`;
+  } else {
+    const sgrps = Object.values((((state.categoryTree[sel.class]||{}).children[sel.subclass]||{}).children[sel.group]||{}).children||{});
+    container.innerHTML = `<div class="sub-grid">${sgrps.map(sg => `
+      <div class="sub-card" onclick="browseSelect('subgroup','${sg.code}')">
+        <span class="sub-card-code">${esc(sg.code)}</span>
+        <span class="sub-card-name">${esc(sg.name||'Подгруппа '+sg.code)}</span>
+      </div>`).join('')}</div>`;
+  }
+}
+
+function browseSelect(level, code) {
+  state.sel[level] = code;
+  // sync builder
+  state.builder[level] = code;
+  // reset deeper levels
+  const idx = LEVELS.indexOf(level);
+  LEVELS.slice(idx+1).forEach(l => { state.sel[l] = null; state.builder[l] = null; });
+  renderBrowse();
+  renderBuilder();
+}
+
+function browseLevel(level, code) {
+  state.sel[level] = code;
+  const idx = LEVELS.indexOf(level);
+  LEVELS.slice(idx+1).forEach(l => { state.sel[l] = null; });
+  renderBrowse();
+}
+
+function resetBrowse() {
+  LEVELS.forEach(l => { state.sel[l] = null; state.builder[l] = null; });
+  renderBrowse();
+  renderBuilder();
+}
+
+/* ── Decimal Builder ──────────────────── */
+function renderBuilder() {
+  const b = state.builder;
+  const pad = (v, n) => v ? String(v).padStart(n,'0') : '0'.repeat(n);
+  const cls = pad(b.class, 2), sub = pad(b.subclass, 3), grp = pad(b.group, 3), sgrp = pad(b.subgroup, 3), knd = pad(b.kind, 2);
+  const complete = b.class && b.subclass && b.group && b.subgroup && b.kind;
+
+  // code display
+  const el = document.getElementById('decCode');
+  const parts = [
+    {v: b.class, s: cls, n: 2},
+    {v: b.subclass, s: sub, n: 3},
+    {v: b.group, s: grp, n: 3},
+    {v: b.subgroup, s: sgrp, n: 3},
+    {v: b.kind, s: knd, n: 2},
+  ];
+  el.innerHTML = parts.map((p,i) => `<span style="color:${p.v ? 'var(--text)' : 'var(--border2)'}">${p.s}</span>`).join('<span style="color:var(--border2)">.</span>');
+
+  // parts chips
+  const partsEl = document.getElementById('decParts');
+  const LNAMES = ['Класс','Подкласс','Группа','Подгруппа','Вид'];
+  partsEl.innerHTML = LEVELS.map((l,i) => `
+    <span class="dec-part ${b[l] ? 'filled' : 'empty'} tag">${b[l] ? pad(b[l], Object.values(LEVEL_DIGITS)[i]) : LNAMES[i]}</span>`).join('');
+
+  // next free number
+  const nextEl = document.getElementById('nextCode');
+  const hintEl = document.getElementById('nextHint');
+  if (complete) {
+    const prefix = `${cls}.${sub}.${grp}.${sgrp}.`;
+    const existing = state.records
+      .filter(r => r.decimal_number && r.decimal_number.startsWith(prefix))
+      .map(r => parseInt(r.decimal_number.split('.').pop()) || 0)
+      .sort((a,b) => a-b);
+    let next = 1;
+    while (existing.includes(next)) next++;
+    nextEl.textContent = `${prefix}${String(next).padStart(2,'0')}`;
+    hintEl.textContent = `Занято: ${existing.length} номеров`;
+    document.getElementById('addBtn').disabled = false;
+  } else {
+    nextEl.textContent = '—';
+    hintEl.textContent = 'Выберите все уровни';
+    document.getElementById('addBtn').disabled = true;
+  }
+}
+
+/* ── Add record ───────────────────────── */
+function addRecord() {
+  const b = state.builder;
+  if (!b.class||!b.subclass||!b.group||!b.subgroup||!b.kind) return;
+  const nextCode = document.getElementById('nextCode').textContent;
+  if (!nextCode || nextCode === '—') return;
+  if (typeof grist === 'undefined') { alert('Grist не подключён'); return; }
+  grist.selectedTable.create({ fields: {
+    decimal_number: nextCode,
+    class_code: String(b.class).padStart(2,'0'),
+    subclass_code: String(b.subclass).padStart(3,'0'),
+    group_code: String(b.group).padStart(3,'0'),
+    subgroup_code: String(b.subgroup).padStart(3,'0'),
+    kind_code: String(b.kind).padStart(2,'0'),
+  }}).then(() => {
+    document.getElementById('addBtn').textContent = '✓ Зарегистрировано';
+    setTimeout(() => { document.getElementById('addBtn').innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Зарегистрировать номер'; }, 2000);
+  });
+}
+
+/* ── Structure nav ────────────────────── */
+function goToRecord(dn) {
+  const r = state.records.find(x => x.decimal_number === dn);
+  if (!r) return;
+  state.selectedResult = r;
+  state.searchQuery = dn;
+  document.getElementById('searchInput').value = dn;
+  document.getElementById('searchClear').className = 'search-clear visible';
+  addToRecent(r);
+  render();
+}
+
+function navParent() {
+  const r = state.selectedResult;
+  if (!r) return;
+  const parent = state.records.find(x =>
+    x.class_code === r.class_code &&
+    x.subclass_code === r.subclass_code &&
+    x.decimal_number !== r.decimal_number &&
+    (x.group_code === r.group_code ? !x.subgroup_code : !x.group_code)
+  );
+  if (parent) { state.selectedResult = parent; render(); }
+}
+
+function navChild() {
+  const r = state.selectedResult;
+  if (!r) return;
+  const child = state.records.find(x =>
+    x.class_code === r.class_code &&
+    x.subclass_code === r.subclass_code &&
+    x.group_code === r.group_code &&
+    x.decimal_number !== r.decimal_number
+  );
+  if (child) { state.selectedResult = child; render(); }
+}
+
+/* ════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════ */
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function highlight(s, q) {
+  if (!q) return esc(s);
+  const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+  return esc(s).replace(re, m => `<mark style="background:var(--warn-bg);color:var(--warn);border-radius:2px">${m}</mark>`);
+}
+
+/* ════════════════════════════════════════
+   BOOT
+════════════════════════════════════════ */
+initGrist();
+</script>
+</body>
+</html>
