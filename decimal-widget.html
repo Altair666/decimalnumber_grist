@@ -158,6 +158,27 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .badge-level{background:var(--surf3);color:var(--tx2)}
 mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 
+/* ── REGISTERED TABLE ── */
+.reg-table{width:100%;border-collapse:collapse;font-size:12px}
+.reg-table th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);padding:5px 8px;border-bottom:2px solid var(--brd);text-align:left;background:var(--surf2)}
+.reg-table th.group-header{border-bottom:2px solid var(--brd2);padding-bottom:2px}
+.reg-table .sub-header th{font-size:10px;color:var(--tx3);font-weight:500;padding:3px 8px;border-bottom:1px solid var(--brd);background:var(--surf2)}
+.reg-table td{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:top}
+.reg-table tr:last-child td{border-bottom:none}
+.reg-table tr:hover td{background:var(--surf2)}
+.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc)}
+.reg-name{font-size:12px;color:var(--tx)}
+.reg-use-dn{font-family:var(--mono);font-size:11px;color:var(--tx3)}
+.reg-use-name{font-size:12px;color:var(--tx2)}
+.reg-empty{padding:16px;text-align:center;color:var(--tx3);font-size:12px}
+
+/* ── BROWSER KIND SEARCH ── */
+.browser-search-wrap{padding:8px 12px;border-bottom:1px solid var(--brd);position:relative}
+.browser-search-input{width:100%;height:30px;border:1px solid var(--brd);border-radius:var(--r);background:var(--surf2);padding:0 9px 0 30px;font-family:var(--sans);font-size:12px;color:var(--tx);outline:none;transition:border-color .15s}
+.browser-search-input:focus{border-color:var(--acc);background:var(--surf)}
+.browser-search-input::placeholder{color:var(--tx3)}
+.browser-search-icon{position:absolute;left:21px;top:50%;transform:translateY(-50%);color:var(--tx3);pointer-events:none}
+
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--brd2);border-radius:2px}
@@ -169,7 +190,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.6</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.7</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -228,6 +249,12 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
       <div class="ph">
         <span class="ph-title">Классификатор ОК ЕСКД</span>
         <div class="bc" id="bc"></div>
+      </div>
+      <!-- Поиск вида внутри браузера -->
+      <div class="browser-search-wrap">
+        <svg class="browser-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input class="browser-search-input" id="browserKindInput" placeholder="Поиск вида по коду или наименованию…" autocomplete="off" oninput="onBrowserKindInput()" onkeydown="onBrowserKindKey(event)">
+        <div class="ac-drop" id="browserKindDrop" style="top:32px;left:12px;right:12px"></div>
       </div>
       <div class="browse-summary" id="browseSummary">
         <div class="bs-code" id="bsCode"></div>
@@ -296,6 +323,15 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
       </div>
     </div>
 
+    <!-- REGISTERED COMPONENTS for selected kind -->
+    <div class="panel" id="pRegistered" style="display:none">
+      <div class="ph">
+        <span class="ph-title">Зарегистрированные компоненты</span>
+        <span class="tag tag-blue" id="regCount"></span>
+      </div>
+      <div id="regBody"></div>
+    </div>
+
   </div>
 </main>
 </div>
@@ -319,6 +355,7 @@ const S = {
   selUse: null,      // {id, decimal_number, name}
   kindAcIdx: -1,
   useAcIdx: -1,
+  browserKindAcIdx: -1,
 };
 
 const ICONS = {'31':'⚡','32':'🔌','33':'💡','34':'🔧','35':'⚙️','36':'🛢️','37':'🔩','38':'📐','39':'🧲','40':'🌡️','41':'🖥️','42':'🏗️','43':'🔬','44':'🚗','45':'✈️','46':'🚢','47':'📦','48':'🔑','49':'🧪','50':'🔭'};
@@ -585,6 +622,12 @@ function renderBrowse() {
     return;
   }
 
+  // Если последний выбранный — Вид, список не показываем
+  if (path.length && path[path.length-1].level === 'Вид') {
+    body.innerHTML = '';
+    return;
+  }
+
   if (!path.length) {
     const classes = S.classifier.filter(r => r.level === 'Класс');
     body.innerHTML = `<div class="cls-list">${classes.map(c => `
@@ -599,7 +642,7 @@ function renderBrowse() {
   const children = S.classifier.filter(r => r.parent_code === parentCode);
 
   if (!children.length) {
-    body.innerHTML = `<div class="empty">Нет дочерних элементов</div>`;
+    body.innerHTML = '';
     return;
   }
 
@@ -615,13 +658,10 @@ function renderBrowseSummary() {
   const summary = document.getElementById('browseSummary');
   if (!path.length) { summary.className = 'browse-summary'; return; }
   summary.className = 'browse-summary on';
-  // Полный код = код последнего выбранного уровня
   document.getElementById('bsCode').textContent = path[path.length-1].code;
-  // Путь: каждый уровень на отдельной строке с меткой
-  const LEVEL_LABELS = ['Класс','Подкласс','Группа','Подгруппа','Вид'];
-  document.getElementById('bsPath').innerHTML = path.map((p,i) =>
-    `<div class="bs-row"><span>${LEVEL_LABELS[i]||p.level}</span>${esc(p.name)}</div>`
-  ).join('');
+  // Путь через запятую без меток
+  document.getElementById('bsPath').innerHTML =
+    `<div class="bs-row">${path.map(p => esc(p.name)).join(', ')}</div>`;
 }
 
 function browseDrill(code, name, level) {
@@ -631,10 +671,15 @@ function browseDrill(code, name, level) {
     if (kind) pickKind(kind);
   }
   renderBrowse();
+  renderRegistered();
 }
 
 function browseUp(idx) {
   S.browsePath = S.browsePath.slice(0, idx);
+  // сбрасываем вид если ушли выше
+  if (!S.browsePath.length || S.browsePath[S.browsePath.length-1].level !== 'Вид') {
+    renderRegistered();
+  }
   renderBrowse();
 }
 
@@ -646,6 +691,111 @@ function renderBreadcrumb() {
     html += `<span class="bc-item ${i===S.browsePath.length-1?'cur':''}" onclick="browseUp(${i+1})">${esc(p.code)}</span>`;
   });
   bc.innerHTML = html;
+}
+
+/* ── Browser kind search ── */
+function onBrowserKindInput() {
+  const q = document.getElementById('browserKindInput').value.trim().toLowerCase();
+  if (!q) { hideDrop('browserKindDrop'); return; }
+  const items = S.classifier.filter(r =>
+    r.level === 'Вид' &&
+    (r.code.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q))
+  ).slice(0, 30);
+  renderAc('browserKindDrop', items, i => {
+    pickKind(items[i]);
+    // build browse path for selected kind
+    buildPathForKind(items[i]);
+    document.getElementById('browserKindInput').value = '';
+    hideDrop('browserKindDrop');
+    renderBrowse();
+    renderRegistered();
+  });
+}
+
+function onBrowserKindKey(e) {
+  acKey(e, 'browserKindDrop', S, 'browserKindAcIdx', () => {
+    const items = getVisibleAcItems('browserKindDrop');
+    if (S.browserKindAcIdx >= 0 && items[S.browserKindAcIdx]) {
+      const kind = items[S.browserKindAcIdx]._rec;
+      pickKind(kind);
+      buildPathForKind(kind);
+      document.getElementById('browserKindInput').value = '';
+      hideDrop('browserKindDrop');
+      renderBrowse();
+      renderRegistered();
+    }
+  });
+}
+
+function buildPathForKind(kind) {
+  // Строим путь от корня до вида через parent_code
+  const path = [];
+  let current = kind;
+  while (current) {
+    path.unshift({ code: current.code, name: current.name, level: current.level });
+    current = current.parent_code
+      ? S.classifier.find(r => r.code === current.parent_code)
+      : null;
+  }
+  S.browsePath = path;
+}
+
+/* ── Registered components table ── */
+function renderRegistered() {
+  const panel = document.getElementById('pRegistered');
+  const body = document.getElementById('regBody');
+  const count = document.getElementById('regCount');
+
+  // показываем только если выбран Вид
+  const path = S.browsePath;
+  if (!path.length || path[path.length-1].level !== 'Вид') {
+    panel.style.display = 'none';
+    return;
+  }
+
+  const kindCode = path[path.length-1].code;
+  const items = S.components.filter(c => {
+    const dn = c.decimal_number || '';
+    return dn.startsWith(kindCode + '.');
+  }).sort((a,b) => (a.decimal_number||'').localeCompare(b.decimal_number||''));
+
+  panel.style.display = 'block';
+  count.textContent = items.length;
+
+  if (!items.length) {
+    body.innerHTML = `<div class="reg-empty">Нет зарегистрированных компонентов для вида ${kindCode}</div>`;
+    return;
+  }
+
+  // Строим lookup id→запись для primary_use
+  const byId = {};
+  S.components.forEach(c => { byId[c.id] = c; });
+
+  body.innerHTML = `<table class="reg-table">
+    <thead>
+      <tr>
+        <th colspan="2" class="group-header" style="border-right:1px solid var(--brd2)">Номенклатура</th>
+        <th colspan="2" class="group-header">Первичное применение</th>
+      </tr>
+      <tr class="sub-header">
+        <th style="width:120px">Децимальный №</th>
+        <th style="border-right:1px solid var(--brd2)">Наименование</th>
+        <th style="width:120px">Децимальный №</th>
+        <th>Наименование</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${items.map(c => {
+        const use = c.primary_use ? byId[c.primary_use] : null;
+        return `<tr>
+          <td class="reg-dn">${esc(c.decimal_number||'—')}</td>
+          <td class="reg-name" style="border-right:1px solid var(--brd)">${esc(c.name||'—')}</td>
+          <td class="reg-use-dn">${use ? esc(use.decimal_number||'—') : ''}</td>
+          <td class="reg-use-name">${use ? esc(use.name||'—') : ''}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
 }
 
 /* ═══════════════════════════════════
@@ -678,10 +828,10 @@ function pickKind(kind) {
   document.getElementById('kindInput').value = `${kind.code} — ${kind.name}`;
   document.getElementById('kindHint').textContent = `Вид: ${kind.code}`;
   hideDrop('kindDrop');
-  // suggest next serial
   const nxt = nextFreeSerial(kind.code);
   if (nxt) document.getElementById('serialInput').value = nxt;
   updatePreview();
+  renderRegistered();
 }
 
 /* ═══════════════════════════════════
