@@ -85,7 +85,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .bc-sep{color:var(--tx3);font-size:11px}
 
 /* Путь выбора — шапка браузера */
-.browse-summary{padding:14px 16px;border-bottom:1px solid var(--brd);background:var(--surf);display:none;gap:16px;align-items:center;flex-direction:row}
+.browse-summary{padding:14px 16px;background:var(--surf);display:none;gap:16px;align-items:center;flex-direction:row}
 .browse-summary.on{display:flex}
 .bs-code{font-family:var(--mono);font-size:28px;font-weight:500;color:var(--acc);line-height:1;flex-shrink:0;text-align:center;min-width:120px}
 .bs-path{flex:1;min-width:0}
@@ -172,7 +172,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 .reg-empty{padding:16px;text-align:center;color:var(--tx3);font-size:12px}
 
 /* ── BROWSER KIND SEARCH ── */
-.browser-search-wrap{padding:8px 12px;border-bottom:1px solid var(--brd);position:relative}
+.browser-search-wrap{padding:8px 12px;position:relative;background:var(--surf)}
 .browser-search-input{width:100%;height:30px;border:1px solid var(--brd);border-radius:var(--r);background:var(--surf2);padding:0 9px 0 30px;font-family:var(--sans);font-size:12px;color:var(--tx);outline:none;transition:border-color .15s}
 .browser-search-input:focus{border-color:var(--acc);background:var(--surf)}
 .browser-search-input::placeholder{color:var(--tx3)}
@@ -189,7 +189,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.8</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.9</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -267,18 +267,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
       <div class="ph"><span class="ph-title">Регистрация компонента</span></div>
       <div class="pb">
 
-        <!-- kind picker -->
-        <div class="form-group" style="margin-bottom:10px">
-          <label class="form-label">Вид по ОК ЕСКД <span style="color:var(--red)">*</span></label>
-          <div class="ac-wrap">
-            <input class="form-input" id="kindInput" placeholder="Введите код или наименование вида…" autocomplete="off" oninput="onKindInput()" onkeydown="onKindKey(event)">
-            <div class="ac-drop" id="kindDrop"></div>
-          </div>
-          <span class="form-hint" id="kindHint">Выберите 6-значный код вида</span>
-          <span class="err-msg" id="kindErr">Выберите вид из списка</span>
-        </div>
-
-        <!-- preview row right under kind picker -->
+        <!-- preview row -->
         <div class="preview-row">
           <div class="preview-box">
             <div class="preview-lbl">Формируемый номер</div>
@@ -288,6 +277,11 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
             <div class="preview-lbl">Следующий свободный</div>
             <div class="preview-val" id="prevNext">—</div>
           </div>
+        </div>
+
+        <!-- hint when no kind picked -->
+        <div id="kindPickHint" style="font-size:11px;color:var(--tx3);margin-bottom:10px;display:none">
+          Выберите вид в блоке «Классификатор ОК ЕСКД» выше
         </div>
 
         <!-- name -->
@@ -796,35 +790,10 @@ function renderRegistered() {
 }
 
 /* ═══════════════════════════════════
-   FORM — KIND AUTOCOMPLETE
+   FORM — PICK KIND (from browser only)
 ═══════════════════════════════════ */
-function onKindInput() {
-  const q = document.getElementById('kindInput').value.trim().toLowerCase();
-  S.selKind = null;
-  S.kindAcIdx = -1;
-  if (!q) { hideDrop('kindDrop'); updatePreview(); return; }
-  const items = S.classifier.filter(r =>
-    r.level === 'Вид' &&
-    (r.code.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q))
-  ).slice(0, 30);
-  renderAc('kindDrop', items, i => pickKind(items[i]));
-  updatePreview();
-}
-
-function onKindKey(e) {
-  acKey(e, 'kindDrop', S, 'kindAcIdx', () => {
-    const items = getVisibleAcItems('kindDrop');
-    if (S.kindAcIdx >= 0 && items[S.kindAcIdx]) {
-      pickKind(items[S.kindAcIdx]._rec);
-    }
-  });
-}
-
 function pickKind(kind) {
   S.selKind = kind;
-  document.getElementById('kindInput').value = `${kind.code} — ${kind.name}`;
-  document.getElementById('kindHint').textContent = `Вид: ${kind.code}`;
-  hideDrop('kindDrop');
   updatePreview();
   renderRegistered();
 }
@@ -869,14 +838,17 @@ function updatePreview() {
   const prevDN = document.getElementById('prevDN');
   const prevNext = document.getElementById('prevNext');
   const btnAdd = document.getElementById('btnAdd');
+  const hint = document.getElementById('kindPickHint');
 
   if (!kind) {
     prevDN.textContent = '——————.———';
     prevDN.className = 'preview-val';
     prevNext.textContent = '—';
     btnAdd.disabled = true;
+    hint.style.display = 'block';
     return;
   }
+  hint.style.display = 'none';
 
   const nxt = nextFreeSerial(kind.code);
   if (!nxt) {
@@ -887,7 +859,6 @@ function updatePreview() {
     return;
   }
 
-  // Формируемый номер = следующий свободный
   const dn = `${kind.code}.${nxt}`;
   prevDN.textContent = dn;
   prevDN.className = 'preview-val ready';
@@ -962,12 +933,11 @@ async function addComponent() {
     }
 
     // Сброс формы
-    document.getElementById('kindInput').value = '';
     document.getElementById('nameInput').value = '';
     document.getElementById('useInput').value = '';
     document.getElementById('useHint').textContent = 'Не выбрано';
-    document.getElementById('kindHint').textContent = 'Выберите 6-значный код вида';
-    S.selKind = null; S.selUse = null;
+    S.selUse = null;
+    // Не сбрасываем selKind — оставляем выбранный вид для добавления следующих
     updatePreview();
 
     btn.textContent = '✓ Зарегистрировано';
