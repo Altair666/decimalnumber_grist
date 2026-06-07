@@ -193,7 +193,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.10</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.11</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -777,12 +777,17 @@ function renderRegistered() {
     </thead>
     <tbody>
       ${items.map(c => {
-        const use = c.primary_use ? byId[c.primary_use] : null;
+        // primary_use может быть либо ссылкой на запись (число > 0), либо отсутствовать
+        // primary_use_name — либо автоматически из связанной записи, либо свободный текст
+        const useId = c.primary_use;
+        const linked = (useId && useId > 0) ? byId[useId] : null;
+        const useDN = linked ? linked.decimal_number : '';
+        const useName = linked ? linked.name : (c.primary_use_name || '');
         return `<tr>
           <td class="reg-dn">${esc(c.decimal_number||'—')}</td>
           <td class="reg-name" style="border-right:1px solid var(--brd)">${esc(c.name||'—')}</td>
-          <td class="reg-use-dn">${use ? esc(use.decimal_number||'—') : ''}</td>
-          <td class="reg-use-name">${use ? esc(use.name||'—') : ''}</td>
+          <td class="reg-use-dn">${esc(useDN)}</td>
+          <td class="reg-use-name">${esc(useName)}${useName && !linked ? ' <span style="font-size:9px;color:var(--tx3);font-style:italic">(текст)</span>' : ''}</td>
         </tr>`;
       }).join('')}
     </tbody>
@@ -805,7 +810,7 @@ function onUseInput() {
   const q = document.getElementById('useInput').value.trim().toLowerCase();
   S.selUse = null;
   S.useAcIdx = -1;
-  document.getElementById('useHint').textContent = 'Не выбрано';
+  document.getElementById('useHint').textContent = q ? 'Свободный текст (не привязан к записи)' : 'Не выбрано';
   if (!q) { hideDrop('useDrop'); return; }
   const items = S.components.filter(r =>
     (r.decimal_number||'').toLowerCase().includes(q) ||
@@ -824,7 +829,7 @@ function onUseKey(e) {
 function pickUse(r) {
   S.selUse = r;
   document.getElementById('useInput').value = `${r.decimal_number} — ${r.name}`;
-  document.getElementById('useHint').textContent = r.decimal_number;
+  document.getElementById('useHint').textContent = `Связан с ${r.decimal_number}`;
   hideDrop('useDrop');
 }
 
@@ -876,14 +881,24 @@ async function addComponent() {
   btn.disabled = true;
   btn.textContent = 'Сохранение…';
 
+  // Передаём ТОЛЬКО eskd_kind и name. Формульные поля (serial, decimal_number) Grist считает сам.
   const fields = {
     eskd_kind: kind.id,
     name: name,
   };
-  if (S.selUse) fields.primary_use = S.selUse.id;
 
-  // Оптимистичное добавление — сразу в локальный state и таблицу
-  const tempId = -Date.now(); // отрицательный id чтобы не пересекаться с реальными
+  // primary_use может быть либо ссылкой (id), либо свободным текстом (имя)
+  const useText = document.getElementById('useInput').value.trim();
+  if (S.selUse) {
+    // Выбрана конкретная запись — пишем числовой ID в primary_use
+    fields.primary_use = S.selUse.id;
+  } else if (useText) {
+    // Свободный текст — пишем в primary_use_name, primary_use оставляем пустым
+    fields.primary_use_name = useText;
+  }
+
+  // Оптимистичное добавление
+  const tempId = -Date.now();
   const dn = `${kind.code}.${serial}`;
   const optimisticRecord = {
     id: tempId,
@@ -892,13 +907,13 @@ async function addComponent() {
     eskd_kind: kind.id,
     eskd_kind_name: kind.name,
     primary_use: S.selUse ? S.selUse.id : 0,
+    primary_use_name: S.selUse ? S.selUse.name : (useText || ''),
   };
   S.components.push(optimisticRecord);
   if (!serialCache[kind.code]) serialCache[kind.code] = new Set();
   serialCache[kind.code].add(serial);
   S.recent.unshift({ id: tempId, decimal_number: dn, name, eskd_kind_name: kind.name });
 
-  // Сразу перерисовываем
   renderRegistered();
   renderSidebar();
 
@@ -909,7 +924,6 @@ async function addComponent() {
 
       // PATCH — перезапускаем trigger-формулу serial
       if (newId) {
-        // обновляем id оптимистичной записи на реальный
         const idx = S.components.findIndex(c => c.id === tempId);
         if (idx >= 0) S.components[idx].id = newId;
 
@@ -929,7 +943,6 @@ async function addComponent() {
     document.getElementById('useInput').value = '';
     document.getElementById('useHint').textContent = 'Не выбрано';
     S.selUse = null;
-    // Не сбрасываем selKind — оставляем выбранный вид для добавления следующих
     updatePreview();
 
     btn.textContent = '✓ Зарегистрировано';
@@ -941,7 +954,7 @@ async function addComponent() {
     }, 2500);
 
   } catch(e) {
-    // Откат оптимистичного добавления при ошибке
+    // Откат
     S.components = S.components.filter(c => c.id !== tempId);
     serialCache[kind.code].delete(serial);
     S.recent = S.recent.filter(r => r.id !== tempId);
