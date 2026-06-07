@@ -176,13 +176,14 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 .reg-empty{padding:16px;text-align:center;color:var(--tx3);font-size:12px}
 
 /* Author avatar */
-.reg-author{padding:6px 8px}
-.avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;border-radius:5px;color:#fff;font-size:11px;font-weight:600;font-family:var(--sans);cursor:default;position:relative;user-select:none}
+.reg-author{padding:6px 8px;text-align:center}
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;border-radius:5px;color:#fff;font-size:11px;font-weight:600;font-family:var(--sans);cursor:default;position:relative;user-select:none;margin:0 auto}
 .avatar[data-tooltip]:hover::after{
   content:attr(data-tooltip);
   position:absolute;
   bottom:calc(100% + 6px);
-  right:0;
+  left:50%;
+  transform:translateX(-50%);
   background:var(--tx);
   color:#fff;
   padding:6px 10px;
@@ -200,7 +201,8 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
   content:'';
   position:absolute;
   bottom:calc(100% + 1px);
-  right:8px;
+  left:50%;
+  transform:translateX(-50%);
   border:5px solid transparent;
   border-top-color:var(--tx);
   z-index:1000;
@@ -225,7 +227,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.14</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.15</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
