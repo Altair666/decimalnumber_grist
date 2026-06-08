@@ -256,7 +256,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.30</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.31</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -458,6 +458,7 @@ async function loadComponents() {
     const rows = await grist.docApi.fetchTable('Components');
     S.components = rowsToRecords(rows);
     computeNextSerials();
+    refreshPrefixList();
     renderAll();
   } catch(e) {
     console.error('Ошибка загрузки Components:', e);
@@ -1268,6 +1269,25 @@ function updatePreview() {
 
 function onPrefixInput() {
   updatePreview();
+}
+
+function refreshPrefixList() {
+  // Собираем уникальные префиксы из существующих записей
+  const used = new Set();
+  S.components.forEach(c => {
+    if (c.org_prefix) {
+      const p = String(c.org_prefix).trim().replace(/\.+$/, '');
+      if (p) used.add(p);
+    }
+  });
+  // Базовые варианты всегда присутствуют
+  ['ЛМАП', 'ЭЛМАП'].forEach(p => used.add(p));
+  // Сортируем для стабильности
+  const sorted = Array.from(used).sort();
+  const datalist = document.getElementById('prefixList');
+  if (datalist) {
+    datalist.innerHTML = sorted.map(p => `<option value="${esc(p)}">`).join('');
+  }
 }
 
 // also trigger preview on name input
