@@ -175,6 +175,22 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 .reg-use-name{font-size:12px;color:var(--tx2)}
 .reg-empty{padding:16px;text-align:center;color:var(--tx3);font-size:12px}
 
+/* Inline edit */
+.cell-content{display:flex;align-items:center;justify-content:center;gap:6px;min-height:22px}
+.cell-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+.cell-edit-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--tx3);cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
+.cell-edit-btn:hover{background:var(--surf2);color:var(--acc);border-color:var(--brd)}
+.cell-edit-btn.save{color:var(--grn)}
+.cell-edit-btn.save:hover{background:var(--grn-bg);color:var(--grn);border-color:var(--grn-brd)}
+.cell-edit-btn.save:disabled{opacity:.3;cursor:not-allowed;background:transparent;border-color:transparent}
+.cell-edit-btn.cancel{color:var(--red)}
+.cell-edit-btn.cancel:hover{background:var(--red-bg);color:var(--red);border-color:var(--red-brd)}
+.cell-edit-input{flex:1;height:24px;border:1px solid var(--acc);border-radius:4px;padding:0 6px;font-family:var(--sans);font-size:12px;color:var(--tx);outline:none;background:var(--surf);min-width:0;text-align:center}
+.cell-edit-input.mono{font-family:var(--mono);font-size:11px;color:var(--acc)}
+.cell-edit-wrap{position:relative;flex:1;min-width:0}
+.cell-edit-drop{position:absolute;top:26px;left:0;right:0;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);text-align:left;display:none}
+.cell-edit-drop.on{display:block}
+
 /* Author avatar */
 .reg-author{padding:6px 8px;text-align:center}
 .avatar{display:inline-flex;align-items:center;justify-content:center;width:26px;height:22px;border-radius:5px;color:#fff;font-size:11px;font-weight:600;font-family:var(--sans);cursor:default;position:relative;user-select:none;margin:0 auto}
@@ -227,7 +243,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.20</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.21</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -375,6 +391,8 @@ const S = {
   kindAcIdx: -1,
   useAcIdx: -1,
   browserKindAcIdx: -1,
+  // inline edit для первичного применения в таблице
+  editing: null, // { rowId: number, mode: 'ref'|'text', selUse: {id,decimal_number,name}|null }
 };
 
 const ICONS = {'31':'⚡','32':'🔌','33':'💡','34':'🔧','35':'⚙️','36':'🛢️','37':'🔩','38':'📐','39':'🧲','40':'🌡️','41':'🖥️','42':'🏗️','43':'🔬','44':'🚗','45':'✈️','46':'🚢','47':'📦','48':'🔑','49':'🧪','50':'🔭'};
@@ -847,6 +865,7 @@ function renderRegistered() {
         const linked = (useId && useId > 0) ? byId[useId] : null;
         const useDN = linked ? linked.decimal_number : '';
         const useName = linked ? linked.name : (c.primary_use_name || '');
+        const hasLink = !!linked;
         const author = c.created_by || '';
         const ts = c.created_at;
         const dateStr = (ts && !isNaN(ts)) ? new Date(ts * 1000).toLocaleString('ru-RU') : '';
@@ -854,11 +873,62 @@ function renderRegistered() {
         const tooltipText = author
           ? `${author}${dateStr ? '\n' + dateStr : ''}`
           : 'Автор неизвестен';
+        const editing = S.editing && S.editing.rowId === c.id;
+        const editingDN = editing && S.editing.mode === 'ref';
+        const editingName = editing && S.editing.mode === 'text';
+
+        // Ячейка децимального номера ПП
+        let dnCell;
+        if (editingDN) {
+          const selectedDN = S.editing.selUse ? S.editing.selUse.decimal_number : '';
+          dnCell = `<div class="cell-content">
+            <div class="cell-edit-wrap">
+              <input class="cell-edit-input mono" id="editDNInput-${c.id}" placeholder="Поиск..." autocomplete="off" value="${esc(selectedDN)}" oninput="onEditDNInput(${c.id})" onkeydown="onEditKey(event, ${c.id})">
+              <div class="cell-edit-drop" id="editDNDrop-${c.id}"></div>
+            </div>
+            <button class="cell-edit-btn save" id="editSaveBtn-${c.id}" ${S.editing.selUse ? '' : 'disabled'} onclick="saveEditDN(${c.id})" title="Сохранить">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button class="cell-edit-btn cancel" onclick="cancelEdit()" title="Отмена">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>`;
+        } else {
+          dnCell = `<div class="cell-content">
+            <span class="cell-text reg-use-dn">${esc(useDN)}</span>
+            <button class="cell-edit-btn" onclick="startEditDN(${c.id})" title="Редактировать">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+          </div>`;
+        }
+
+        // Ячейка наименования ПП
+        let nameCell;
+        if (editingName) {
+          nameCell = `<div class="cell-content">
+            <input class="cell-edit-input" id="editNameInput-${c.id}" placeholder="Свободный текст…" autocomplete="off" value="${esc(c.primary_use_name||'')}" oninput="onEditNameInput(${c.id})" onkeydown="onEditKey(event, ${c.id})">
+            <button class="cell-edit-btn save" id="editSaveBtn-${c.id}" onclick="saveEditName(${c.id})" title="Сохранить">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            </button>
+            <button class="cell-edit-btn cancel" onclick="cancelEdit()" title="Отмена">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>`;
+        } else {
+          // Карандаш в наименовании доступен только если нет ссылки
+          const nameEditBtn = hasLink ? '' : `<button class="cell-edit-btn" onclick="startEditName(${c.id})" title="Редактировать"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>`;
+          const textWithMark = useName + (useName && !linked ? ' <span style="font-size:9px;color:var(--tx3);font-style:italic">(текст)</span>' : '');
+          nameCell = `<div class="cell-content">
+            <span class="cell-text reg-use-name">${esc(useName)}${useName && !linked ? ' <span style="font-size:9px;color:var(--tx3);font-style:italic">(текст)</span>' : ''}</span>
+            ${nameEditBtn}
+          </div>`;
+        }
+
         return `<tr>
           <td class="reg-dn">${esc(c.decimal_number||'—')}</td>
           <td class="reg-name" style="border-right:1px solid var(--brd)">${esc(c.name||'—')}</td>
-          <td class="reg-use-dn">${esc(useDN)}</td>
-          <td class="reg-use-name" style="border-right:1px solid var(--brd)">${esc(useName)}${useName && !linked ? ' <span style="font-size:9px;color:var(--tx3);font-style:italic">(текст)</span>' : ''}</td>
+          <td>${dnCell}</td>
+          <td style="border-right:1px solid var(--brd)">${nameCell}</td>
           <td class="reg-author">
             <div class="avatar" data-tooltip="${esc(tooltipText)}" style="background:${author ? avatarColor(author) : 'var(--brd2)'}">${esc(initial)}</div>
           </td>
@@ -866,6 +936,144 @@ function renderRegistered() {
       }).join('')}
     </tbody>
   </table>`;
+
+  // После рендера — если есть активный edit, ставим фокус на input
+  if (S.editing) {
+    const id = S.editing.rowId;
+    const inputId = S.editing.mode === 'ref' ? `editDNInput-${id}` : `editNameInput-${id}`;
+    const el = document.getElementById(inputId);
+    if (el) {
+      el.focus();
+      const val = el.value;
+      el.setSelectionRange(val.length, val.length);
+    }
+  }
+}
+
+/* ═══════════════════════════════════
+   INLINE EDIT — primary_use
+═══════════════════════════════════ */
+function startEditDN(rowId) {
+  S.editing = { rowId, mode: 'ref', selUse: null };
+  renderRegistered();
+}
+
+function startEditName(rowId) {
+  S.editing = { rowId, mode: 'text' };
+  renderRegistered();
+}
+
+function cancelEdit() {
+  S.editing = null;
+  renderRegistered();
+}
+
+function onEditDNInput(rowId) {
+  const input = document.getElementById(`editDNInput-${rowId}`);
+  const q = input.value.trim().toLowerCase();
+  // сбрасываем выбор при изменении текста (нужно явно выбрать из списка)
+  S.editing.selUse = null;
+  document.getElementById(`editSaveBtn-${rowId}`).disabled = true;
+
+  const drop = document.getElementById(`editDNDrop-${rowId}`);
+  if (!q) { drop.className = 'cell-edit-drop'; return; }
+
+  const items = S.components.filter(r =>
+    r.id !== rowId && // нельзя сослаться на себя
+    ((r.decimal_number||'').toLowerCase().includes(q) ||
+     (r.name||'').toLowerCase().includes(q))
+  ).slice(0, 20);
+
+  if (!items.length) { drop.className = 'cell-edit-drop'; return; }
+
+  drop.innerHTML = items.map((r,i) => `
+    <div class="ac-item" data-idx="${i}" style="text-align:left">
+      <span class="ac-code">${esc(r.decimal_number||'')}</span>
+      <span class="ac-name">${esc(r.name||'')}</span>
+    </div>`).join('');
+  drop.querySelectorAll('.ac-item').forEach((el, i) => {
+    el._rec = items[i];
+    el.addEventListener('mousedown', e => e.preventDefault());
+    el.addEventListener('click', () => pickEditDN(rowId, items[i]));
+  });
+  drop.className = 'cell-edit-drop on';
+}
+
+function pickEditDN(rowId, rec) {
+  S.editing.selUse = rec;
+  document.getElementById(`editDNInput-${rowId}`).value = `${rec.decimal_number} — ${rec.name}`;
+  document.getElementById(`editDNDrop-${rowId}`).className = 'cell-edit-drop';
+  document.getElementById(`editSaveBtn-${rowId}`).disabled = false;
+}
+
+function onEditNameInput(rowId) {
+  // ничего особенного, просто кнопка save всегда активна
+}
+
+function onEditKey(e, rowId) {
+  if (e.key === 'Escape') {
+    cancelEdit();
+  } else if (e.key === 'Enter') {
+    if (S.editing.mode === 'ref') {
+      if (S.editing.selUse) saveEditDN(rowId);
+    } else {
+      saveEditName(rowId);
+    }
+  }
+}
+
+async function saveEditDN(rowId) {
+  if (!S.editing || !S.editing.selUse) return;
+  const newUseId = S.editing.selUse.id;
+  const linkedName = S.editing.selUse.name;
+  S.editing = null;
+
+  // Оптимистично
+  const idx = S.components.findIndex(c => c.id === rowId);
+  if (idx >= 0) {
+    S.components[idx].primary_use = newUseId;
+    S.components[idx].primary_use_name = linkedName;
+  }
+  renderRegistered();
+
+  try {
+    if (typeof grist !== 'undefined') {
+      await grist.selectedTable.update({
+        id: rowId,
+        fields: { primary_use: newUseId }
+      });
+      loadComponents();
+    }
+  } catch(e) {
+    alert('Ошибка сохранения: ' + e.message);
+    loadComponents();
+  }
+}
+
+async function saveEditName(rowId) {
+  if (!S.editing) return;
+  const text = document.getElementById(`editNameInput-${rowId}`).value.trim();
+  S.editing = null;
+
+  const idx = S.components.findIndex(c => c.id === rowId);
+  if (idx >= 0) {
+    S.components[idx].primary_use = 0;
+    S.components[idx].primary_use_name = text;
+  }
+  renderRegistered();
+
+  try {
+    if (typeof grist !== 'undefined') {
+      await grist.selectedTable.update({
+        id: rowId,
+        fields: { primary_use: 0, primary_use_name: text }
+      });
+      loadComponents();
+    }
+  } catch(e) {
+    alert('Ошибка сохранения: ' + e.message);
+    loadComponents();
+  }
 }
 
 /* Стабильный цвет по имени пользователя */
