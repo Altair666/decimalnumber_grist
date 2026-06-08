@@ -256,7 +256,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.29</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.30</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -500,30 +500,33 @@ function setConn(ok, lbl) {
 /* ═══════════════════════════════════
    SERIAL / NEXT FREE
 ═══════════════════════════════════ */
-const serialCache = {}; // kindCode → Set of used serials
+const serialCache = {}; // "prefix:kindCode" → Set of used serials
 
 function computeNextSerials() {
   Object.keys(serialCache).forEach(k => delete serialCache[k]);
   S.components.forEach(c => {
-    // decimal_number может быть с префиксом: "ЛМАП.685621.001" или без: "685621.001"
-    // Нам нужен 6-значный код вида (предпоследний сегмент) и serial (последний сегмент)
     const dn = c.decimal_number || '';
     const parts = dn.split('.');
     if (parts.length < 2) return;
     const serial = parts[parts.length - 1].padStart(3, '0');
-    // Ищем последний 6-значный сегмент перед serial — это и есть kindCode
-    let kindCode = null;
+    // Ищем 6-значный код вида
+    let kindIdx = -1;
     for (let i = parts.length - 2; i >= 0; i--) {
-      if (/^\d{6}$/.test(parts[i])) { kindCode = parts[i]; break; }
+      if (/^\d{6}$/.test(parts[i])) { kindIdx = i; break; }
     }
-    if (!kindCode || !/^\d+$/.test(serial)) return;
-    if (!serialCache[kindCode]) serialCache[kindCode] = new Set();
-    serialCache[kindCode].add(serial);
+    if (kindIdx === -1 || !/^\d+$/.test(serial)) return;
+    const kindCode = parts[kindIdx];
+    // Префикс = всё что перед кодом вида, склеенное через точку, или org_prefix из записи
+    const prefix = (c.org_prefix || parts.slice(0, kindIdx).join('.') || '').trim();
+    const key = `${prefix}:${kindCode}`;
+    if (!serialCache[key]) serialCache[key] = new Set();
+    serialCache[key].add(serial);
   });
 }
 
-function nextFreeSerial(kindCode) {
-  const used = serialCache[kindCode] || new Set();
+function nextFreeSerial(kindCode, prefix) {
+  const key = `${(prefix||'').trim()}:${kindCode}`;
+  const used = serialCache[key] || new Set();
   for (let i = 1; i <= 999; i++) {
     const s = String(i).padStart(3,'0');
     if (!used.has(s)) return s;
@@ -531,9 +534,10 @@ function nextFreeSerial(kindCode) {
   return null;
 }
 
-function isSerialFree(kindCode, serial) {
+function isSerialFree(kindCode, prefix, serial) {
+  const key = `${(prefix||'').trim()}:${kindCode}`;
   const s = String(serial).padStart(3,'0');
-  return !(serialCache[kindCode] || new Set()).has(s);
+  return !(serialCache[key] || new Set()).has(s);
 }
 
 /* ═══════════════════════════════════
@@ -1237,7 +1241,7 @@ function pickUse(r) {
 function updatePreview() {
   const kind = S.selKind;
   const nameVal = document.getElementById('nameInput').value.trim();
-  const prefix = (document.getElementById('prefixInput').value || '').trim();
+  const prefix = (document.getElementById('prefixInput').value || '').trim().replace(/\.+$/, '');
 
   const prevDN = document.getElementById('prevDN');
   const btnAdd = document.getElementById('btnAdd');
@@ -1251,7 +1255,7 @@ function updatePreview() {
   }
   hint.style.display = 'none';
 
-  const nxt = nextFreeSerial(kind.code);
+  const nxt = nextFreeSerial(kind.code, prefix);
   if (!nxt) {
     prevDN.value = 'Все занято';
     btnAdd.disabled = true;
@@ -1277,11 +1281,11 @@ async function addComponent() {
   const name = document.getElementById('nameInput').value.trim();
   if (!kind || !name) return;
 
-  const serial = nextFreeSerial(kind.code);
-  if (!serial) return;
-
   const prefixRaw = (document.getElementById('prefixInput').value || '').trim().replace(/\.+$/, '');
   const prefix = prefixRaw || 'ЛМАП';
+
+  const serial = nextFreeSerial(kind.code, prefix);
+  if (!serial) return;
 
   const btn = document.getElementById('btnAdd');
   btn.disabled = true;
@@ -1305,18 +1309,20 @@ async function addComponent() {
   // Оптимистичное добавление
   const tempId = -Date.now();
   const dn = prefix ? `${prefix}.${kind.code}.${serial}` : `${kind.code}.${serial}`;
+  const cacheKey = `${prefix}:${kind.code}`;
   const optimisticRecord = {
     id: tempId,
     decimal_number: dn,
     name: name,
     eskd_kind: kind.id,
     eskd_kind_name: kind.name,
+    org_prefix: prefix,
     primary_use: S.selUse ? S.selUse.id : 0,
     primary_use_name: S.selUse ? S.selUse.name : (useText || ''),
   };
   S.components.push(optimisticRecord);
-  if (!serialCache[kind.code]) serialCache[kind.code] = new Set();
-  serialCache[kind.code].add(serial);
+  if (!serialCache[cacheKey]) serialCache[cacheKey] = new Set();
+  serialCache[cacheKey].add(serial);
   S.recent.unshift({ id: tempId, decimal_number: dn, name, eskd_kind_name: kind.name });
 
   renderRegistered();
@@ -1364,7 +1370,7 @@ async function addComponent() {
   } catch(e) {
     // Откат
     S.components = S.components.filter(c => c.id !== tempId);
-    serialCache[kind.code].delete(serial);
+    if (serialCache[cacheKey]) serialCache[cacheKey].delete(serial);
     S.recent = S.recent.filter(r => r.id !== tempId);
     renderRegistered();
     renderSidebar();
