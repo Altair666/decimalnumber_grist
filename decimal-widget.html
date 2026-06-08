@@ -176,20 +176,25 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 .reg-empty{padding:16px;text-align:center;color:var(--tx3);font-size:12px}
 
 /* Inline edit */
-.cell-content{display:flex;align-items:center;justify-content:center;gap:6px;min-height:22px}
+.cell-content{display:flex;align-items:center;justify-content:center;gap:6px;min-height:18px;line-height:1.4}
 .cell-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
-.cell-edit-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4px;background:transparent;color:var(--tx3);cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
-.cell-edit-btn:hover{background:var(--surf2);color:var(--acc);border-color:var(--brd)}
+.cell-text.reg-use-dn{font-family:var(--mono);font-size:11px;color:var(--acc)}
+.cell-text.reg-use-name{font-size:12px;color:var(--tx2)}
+.cell-edit-btn{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1px solid transparent;border-radius:4px;background:transparent;color:#E07B1F;cursor:pointer;flex-shrink:0;transition:all .1s;padding:0}
+.cell-edit-btn:hover{background:#FFF4E6;color:#C5651A;border-color:#F5D4A0}
 .cell-edit-btn.save{color:var(--grn)}
 .cell-edit-btn.save:hover{background:var(--grn-bg);color:var(--grn);border-color:var(--grn-brd)}
 .cell-edit-btn.save:disabled{opacity:.3;cursor:not-allowed;background:transparent;border-color:transparent}
 .cell-edit-btn.cancel{color:var(--red)}
 .cell-edit-btn.cancel:hover{background:var(--red-bg);color:var(--red);border-color:var(--red-brd)}
-.cell-edit-input{flex:1;height:24px;border:1px solid var(--acc);border-radius:4px;padding:0 6px;font-family:var(--sans);font-size:12px;color:var(--tx);outline:none;background:var(--surf);min-width:0;text-align:center}
+.cell-edit-input{flex:1;height:22px;border:1px solid var(--acc);border-radius:4px;padding:0 6px;font-family:var(--sans);font-size:12px;color:var(--tx);outline:none;background:var(--surf);min-width:0;text-align:center}
 .cell-edit-input.mono{font-family:var(--mono);font-size:11px;color:var(--acc)}
 .cell-edit-wrap{position:relative;flex:1;min-width:0}
-.cell-edit-drop{position:absolute;top:26px;left:0;right:0;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);text-align:left;display:none}
+.cell-edit-drop{position:absolute;top:24px;left:0;right:0;background:var(--surf);border:1px solid var(--brd);border-radius:var(--r);z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);text-align:left;display:none}
 .cell-edit-drop.on{display:block}
+
+/* Reset td padding/alignment for editable cells to keep row heights uniform */
+.reg-table td.editable-cell{padding:4px 8px;vertical-align:middle}
 
 /* Author avatar */
 .reg-author{padding:6px 8px;text-align:center}
@@ -243,7 +248,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.21</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.22</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -927,8 +932,8 @@ function renderRegistered() {
         return `<tr>
           <td class="reg-dn">${esc(c.decimal_number||'—')}</td>
           <td class="reg-name" style="border-right:1px solid var(--brd)">${esc(c.name||'—')}</td>
-          <td>${dnCell}</td>
-          <td style="border-right:1px solid var(--brd)">${nameCell}</td>
+          <td class="editable-cell">${dnCell}</td>
+          <td class="editable-cell" style="border-right:1px solid var(--brd)">${nameCell}</td>
           <td class="reg-author">
             <div class="avatar" data-tooltip="${esc(tooltipText)}" style="background:${author ? avatarColor(author) : 'var(--brd2)'}">${esc(initial)}</div>
           </td>
