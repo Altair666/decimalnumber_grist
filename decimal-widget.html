@@ -257,7 +257,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.33</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.34</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -419,6 +419,8 @@ const S = {
   relExpanded: null, // Set<id> — какие узлы дерева раскрыты
   relRootId: null,   // id корня текущего дерева (для инвалидации при смене)
   docId: null,       // id документа Grist (для построения URL вложений)
+  accessToken: null, // токен для доступа к API (вложения)
+  tokenBaseUrl: null,// базовый URL для API с токеном
 };
 
 const ICONS = {'31':'⚡','32':'🔌','33':'💡','34':'🔧','35':'⚙️','36':'🛢️','37':'🔩','38':'📐','39':'🧲','40':'🌡️','41':'🖥️','42':'🏗️','43':'🔬','44':'🚗','45':'✈️','46':'🚢','47':'📦','48':'🔑','49':'🧪','50':'🔭'};
@@ -486,6 +488,18 @@ async function loadClassifier() {
   }
   console.log('Grist docId:', S.docId);
 
+  // Получаем токен доступа для скачивания вложений (cross-origin)
+  try {
+    if (grist.docApi.getAccessToken) {
+      const tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
+      S.accessToken = tokenInfo.token;
+      S.tokenBaseUrl = tokenInfo.baseUrl;
+      console.log('Access token получен, baseUrl:', S.tokenBaseUrl);
+    }
+  } catch(e) {
+    console.warn('Не удалось получить access token:', e);
+  }
+
   try {
     const tables = await grist.docApi.listTables();
     if (tables.includes('ESKD_Classifier')) {
@@ -514,15 +528,17 @@ function attachmentUrl(imageField) {
   }
   if (!ids.length || !ids[0]) return null;
   const attId = ids[0];
-  // Виджет в iframe — origin Grist берём из document.referrer
-  let origin = '';
-  try {
-    if (document.referrer) origin = new URL(document.referrer).origin;
-  } catch(e) {}
+  // Через access token — работает cross-origin без cookies
+  if (S.accessToken && S.tokenBaseUrl) {
+    return `${S.tokenBaseUrl}/attachments/${attId}/download?auth=${S.accessToken}`;
+  }
+  // Fallback — относительный путь (работает только если widget и Grist same-origin)
   if (S.docId) {
+    let origin = '';
+    try { if (document.referrer) origin = new URL(document.referrer).origin; } catch(e) {}
     return `${origin}/api/docs/${S.docId}/attachments/${attId}/download`;
   }
-  return `${origin}/api/attachments/${attId}/download`;
+  return null;
 }
 
 function rowsToRecords(rows) {
