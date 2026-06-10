@@ -257,7 +257,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.40</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.41</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -474,6 +474,8 @@ function saveToCache() {
 /* ═══════════════════════════════════
    GRIST
 ═══════════════════════════════════ */
+let firstComponentsLoadDone = false; // флаг чтобы onRecords не дублировал первичную загрузку
+
 function initGrist() {
   const t0 = performance.now();
 
@@ -485,16 +487,14 @@ function initGrist() {
 
   grist.ready({ requiredAccess: 'full' });
 
-  // 1. Мгновенный рендер из кэша если есть
-  const hasCache = loadFromCache();
-  if (hasCache) renderAll();
+  // Сразу меняем статус с "Ожидание Grist…" чтобы пользователь видел подключение
+  setConn(true, 'Загрузка…');
 
-  // 2. onRecords — триггер обновления Components
+  // onRecords — триггер ТОЛЬКО для последующих обновлений, не для первичной загрузки
   grist.onRecords(() => {
-    loadComponents();
+    if (firstComponentsLoadDone) loadComponents();
   });
 
-  // 3. Опции (избранное/последние)
   grist.onOptions(opts => {
     if (!opts) return;
     if (opts.favorites) S.favorites = opts.favorites;
@@ -502,8 +502,12 @@ function initGrist() {
     renderSidebar();
   });
 
-  // 4. Параллельная загрузка обеих таблиц + прогрессивный рендер
-  //    Каждая функция сама вызывает renderAll когда готова — пользователь видит интерфейс сразу
+  // Кэш читаем отложенно — не блокирует первый рендер
+  setTimeout(() => {
+    if (loadFromCache()) renderAll();
+  }, 0);
+
+  // Загрузка данных параллельно
   Promise.all([
     loadClassifier(),
     loadComponents(),
@@ -520,7 +524,8 @@ async function loadComponents() {
     S.components = rowsToRecords(rows);
     computeNextSerials();
     refreshPrefixList();
-    console.log(`[Components] ${S.components.length} записей за ${Math.round(performance.now()-t0)}мс`);
+    firstComponentsLoadDone = true;
+    console.log(`[Components] ${S.components.length} за ${Math.round(performance.now()-t0)}мс`);
     renderAll();
   } catch(e) {
     console.error('Ошибка загрузки Components:', e);
@@ -552,7 +557,6 @@ async function loadClassifier() {
       S.classifier = rowsToRecords(rows);
       S.classifier.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
       console.log(`[ESKD_Classifier] ${S.classifier.length} за ${Math.round(performance.now()-t0)}мс`);
-      // Сохраняем в кэш отложенно, чтобы не блокировать render
       setTimeout(saveToCache, 0);
       setConn(true, `${S.classifier.length} видов`);
     } else {
