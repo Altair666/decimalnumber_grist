@@ -257,7 +257,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.34</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.35</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -517,8 +517,33 @@ async function loadClassifier() {
   renderAll();
 }
 
-/* Построить URL первой картинки из поля Attachments */
-function attachmentUrl(imageField) {
+/* Кэш загруженных картинок: attachmentId → blob URL */
+const attachmentCache = {};
+
+/* Скачать вложение через fetch с токеном, вернуть blob URL */
+async function fetchAttachmentBlobUrl(attId) {
+  if (attachmentCache[attId]) return attachmentCache[attId];
+  if (!S.accessToken || !S.tokenBaseUrl) return null;
+
+  const url = `${S.tokenBaseUrl}/attachments/${attId}/download?auth=${S.accessToken}`;
+  try {
+    const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
+    if (!res.ok) {
+      console.warn(`Attachment ${attId}: HTTP ${res.status}`);
+      return null;
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    attachmentCache[attId] = blobUrl;
+    return blobUrl;
+  } catch(e) {
+    console.warn(`Attachment ${attId} fetch failed:`, e);
+    return null;
+  }
+}
+
+/* Получить id первого вложения из поля */
+function firstAttachmentId(imageField) {
   if (!imageField) return null;
   let ids = [];
   if (Array.isArray(imageField)) {
@@ -526,18 +551,11 @@ function attachmentUrl(imageField) {
   } else if (typeof imageField === 'number' && imageField > 0) {
     ids = [imageField];
   }
-  if (!ids.length || !ids[0]) return null;
-  const attId = ids[0];
-  // Через access token — работает cross-origin без cookies
-  if (S.accessToken && S.tokenBaseUrl) {
-    return `${S.tokenBaseUrl}/attachments/${attId}/download?auth=${S.accessToken}`;
-  }
-  // Fallback — относительный путь (работает только если widget и Grist same-origin)
-  if (S.docId) {
-    let origin = '';
-    try { if (document.referrer) origin = new URL(document.referrer).origin; } catch(e) {}
-    return `${origin}/api/docs/${S.docId}/attachments/${attId}/download`;
-  }
+  return (ids.length && ids[0]) ? ids[0] : null;
+}
+
+/* Старая синхронная функция (оставлена для совместимости — возвращает null чтобы fallback не сработал) */
+function attachmentUrl(imageField) {
   return null;
 }
 
@@ -893,25 +911,27 @@ function renderBrowseSummary() {
 
   const cur = path[path.length-1];
   const curRec = S.classifier.find(r => r.code === cur.code);
-  const url = curRec ? attachmentUrl(curRec.image) : null;
+  const attId = curRec ? firstAttachmentId(curRec.image) : null;
 
   document.getElementById('bsCode').textContent = cur.code;
-  // Путь через запятую без меток + миниатюра справа от пути
   const pathHtml = `<div class="bs-row">${path.map(p => esc(p.name)).join(', ')}</div>`;
   document.getElementById('bsPath').innerHTML = pathHtml;
 
-  // Вставляем/убираем превью
-  const summaryEl = summary;
-  let thumb = summaryEl.querySelector('.bs-thumb');
-  if (url) {
+  // Управление превью
+  let thumb = summary.querySelector('.bs-thumb');
+  if (attId) {
     if (!thumb) {
       thumb = document.createElement('img');
       thumb.className = 'bs-thumb';
       thumb.onerror = () => { thumb.style.display = 'none'; };
-      summaryEl.appendChild(thumb);
+      summary.appendChild(thumb);
     }
-    thumb.src = url;
     thumb.style.display = '';
+    // Загружаем blob и подставляем
+    fetchAttachmentBlobUrl(attId).then(url => {
+      if (url) thumb.src = url;
+      else thumb.style.display = 'none';
+    });
   } else if (thumb) {
     thumb.remove();
   }
