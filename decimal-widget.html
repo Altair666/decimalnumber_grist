@@ -257,7 +257,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.39</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.40</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -426,10 +426,57 @@ const S = {
 const ICONS = {'31':'⚡','32':'🔌','33':'💡','34':'🔧','35':'⚙️','36':'🛢️','37':'🔩','38':'📐','39':'🧲','40':'🌡️','41':'🖥️','42':'🏗️','43':'🔬','44':'🚗','45':'✈️','46':'🚢','47':'📦','48':'🔑','49':'🧪','50':'🔭'};
 const PALETTE = ['#1E4ED8','#0D6E4E','#92400E','#991B1B','#5B21B6','#0369A1','#166534','#92400E'];
 
+const CACHE_KEY = 'decimal_widget_classifier_v1';
+const CACHE_TTL = 24 * 60 * 60 * 1000; // сутки
+
+/* Мгновенно отрисовать классификатор из localStorage если есть */
+function loadFromCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.classifier) || !data.classifier.length) return false;
+    S.classifier = data.classifier;
+    const ageSec = Math.round((Date.now() - data.timestamp) / 1000);
+    console.log(`[cache] классификатор из localStorage: ${S.classifier.length} записей, возраст ${ageSec}с`);
+    setConn(true, `${S.classifier.length} видов (кэш)`);
+    return true;
+  } catch(e) {
+    console.warn('[cache] чтение неудачно:', e);
+    return false;
+  }
+}
+
+function saveToCache() {
+  try {
+    const data = {
+      timestamp: Date.now(),
+      classifier: S.classifier,
+    };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    console.log('[cache] сохранён');
+  } catch(e) {
+    // localStorage может быть переполнен — сохраним без image_base64
+    try {
+      const light = S.classifier.map(r => {
+        const copy = {...r};
+        delete copy.image_base64;
+        return copy;
+      });
+      localStorage.setItem(CACHE_KEY, JSON.stringify({timestamp: Date.now(), classifier: light}));
+      console.log('[cache] сохранён без картинок (переполнен)');
+    } catch(e2) {
+      console.warn('[cache] не удалось сохранить:', e2);
+    }
+  }
+}
+
 /* ═══════════════════════════════════
    GRIST
 ═══════════════════════════════════ */
 function initGrist() {
+  const t0 = performance.now();
+
   if (typeof grist === 'undefined') {
     setConn(false, 'Grist API не найден');
     renderAll();
@@ -438,12 +485,16 @@ function initGrist() {
 
   grist.ready({ requiredAccess: 'full' });
 
-  // onRecords используем только как триггер обновления — данные грузим явно
+  // 1. Мгновенный рендер из кэша если есть
+  const hasCache = loadFromCache();
+  if (hasCache) renderAll();
+
+  // 2. onRecords — триггер обновления Components
   grist.onRecords(() => {
     loadComponents();
   });
 
-  // Опции (избранное/последние)
+  // 3. Опции (избранное/последние)
   grist.onOptions(opts => {
     if (!opts) return;
     if (opts.favorites) S.favorites = opts.favorites;
@@ -451,18 +502,25 @@ function initGrist() {
     renderSidebar();
   });
 
-  // Первичная загрузка
-  loadClassifier();
-  loadComponents();
+  // 4. Параллельная загрузка обеих таблиц + прогрессивный рендер
+  //    Каждая функция сама вызывает renderAll когда готова — пользователь видит интерфейс сразу
+  Promise.all([
+    loadClassifier(),
+    loadComponents(),
+  ]).then(() => {
+    console.log(`[init] полная загрузка за ${Math.round(performance.now() - t0)}мс`);
+  });
 }
 
 async function loadComponents() {
   if (typeof grist === 'undefined') return;
+  const t0 = performance.now();
   try {
     const rows = await grist.docApi.fetchTable('Components');
     S.components = rowsToRecords(rows);
     computeNextSerials();
     refreshPrefixList();
+    console.log(`[Components] ${S.components.length} записей за ${Math.round(performance.now()-t0)}мс`);
     renderAll();
   } catch(e) {
     console.error('Ошибка загрузки Components:', e);
@@ -471,34 +529,21 @@ async function loadComponents() {
 
 async function loadClassifier() {
   if (typeof grist === 'undefined') return;
+  const t0 = performance.now();
 
-  // Получаем docId через Grist API (надёжнее чем парсить parent URL)
-  try {
-    if (grist.docApi.getDocName) {
-      S.docId = await grist.docApi.getDocName();
-    }
-  } catch(e) { /* нестрашно */ }
-  // Fallback — из referrer
-  if (!S.docId) {
+  // docId — в фоне, не блокирует основную загрузку
+  (async () => {
     try {
-      const refUrl = document.referrer || '';
-      const m = refUrl.match(/\/doc\/([^/?#]+)/) || refUrl.match(/\/o\/[^/]+\/([^/?#]+)\//);
-      if (m) S.docId = m[1];
+      if (grist.docApi.getDocName) S.docId = await grist.docApi.getDocName();
     } catch(e) {}
-  }
-  console.log('Grist docId:', S.docId);
-
-  // Получаем токен доступа для скачивания вложений (cross-origin)
-  try {
-    if (grist.docApi.getAccessToken) {
-      const tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
-      S.accessToken = tokenInfo.token;
-      S.tokenBaseUrl = tokenInfo.baseUrl;
-      console.log('Access token получен, baseUrl:', S.tokenBaseUrl);
+    if (!S.docId) {
+      try {
+        const refUrl = document.referrer || '';
+        const m = refUrl.match(/\/doc\/([^/?#]+)/) || refUrl.match(/\/o\/[^/]+\/([^/?#]+)\//);
+        if (m) S.docId = m[1];
+      } catch(e) {}
     }
-  } catch(e) {
-    console.warn('Не удалось получить access token:', e);
-  }
+  })();
 
   try {
     const tables = await grist.docApi.listTables();
@@ -506,17 +551,9 @@ async function loadClassifier() {
       const rows = await grist.docApi.fetchTable('ESKD_Classifier');
       S.classifier = rowsToRecords(rows);
       S.classifier.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-      // Отладка: проверка наличия image_base64
-      if (S.classifier.length) {
-        const cols = Object.keys(S.classifier[0]);
-        console.log('Колонки ESKD_Classifier:', cols);
-        const withImg = S.classifier.find(r => r.image_base64 && r.image_base64.length > 20);
-        if (withImg) {
-          console.log(`image_base64 OK: code=${withImg.code}, длина=${withImg.image_base64.length}, начало:`, withImg.image_base64.slice(0,60));
-        } else {
-          console.warn('Ни одной записи с заполненным image_base64. Поле существует?', cols.includes('image_base64'));
-        }
-      }
+      console.log(`[ESKD_Classifier] ${S.classifier.length} за ${Math.round(performance.now()-t0)}мс`);
+      // Сохраняем в кэш отложенно, чтобы не блокировать render
+      setTimeout(saveToCache, 0);
       setConn(true, `${S.classifier.length} видов`);
     } else {
       setConn(false, 'Таблица ESKD_Classifier не найдена');
