@@ -257,7 +257,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.41</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.42</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -426,8 +426,21 @@ const S = {
 const ICONS = {'31':'⚡','32':'🔌','33':'💡','34':'🔧','35':'⚙️','36':'🛢️','37':'🔩','38':'📐','39':'🧲','40':'🌡️','41':'🖥️','42':'🏗️','43':'🔬','44':'🚗','45':'✈️','46':'🚢','47':'📦','48':'🔑','49':'🧪','50':'🔭'};
 const PALETTE = ['#1E4ED8','#0D6E4E','#92400E','#991B1B','#5B21B6','#0369A1','#166534','#92400E'];
 
-const CACHE_KEY = 'decimal_widget_classifier_v1';
-const CACHE_TTL = 24 * 60 * 60 * 1000; // сутки
+const CACHE_KEY = 'decimal_widget_classifier_v2'; // bump после изменения формата
+const CACHE_TTL = 24 * 60 * 60 * 1000;
+
+/* Карта картинок: code → image_base64 (загружается ленивыми способами) */
+const imagesByCode = {};
+
+/* Извлечь картинки из массива записей в отдельную Map, очистить поле в самих записях */
+function extractImages(records) {
+  records.forEach(r => {
+    if (r.image_base64 && typeof r.image_base64 === 'string' && r.image_base64.length > 20) {
+      imagesByCode[r.code] = r.image_base64;
+      r.image_base64 = ''; // освобождаем память записи (кэш будет лёгкий)
+    }
+  });
+}
 
 /* Мгновенно отрисовать классификатор из localStorage если есть */
 function loadFromCache() {
@@ -438,7 +451,7 @@ function loadFromCache() {
     if (!data || !Array.isArray(data.classifier) || !data.classifier.length) return false;
     S.classifier = data.classifier;
     const ageSec = Math.round((Date.now() - data.timestamp) / 1000);
-    console.log(`[cache] классификатор из localStorage: ${S.classifier.length} записей, возраст ${ageSec}с`);
+    console.log(`[cache] классификатор: ${S.classifier.length} записей, возраст ${ageSec}с`);
     setConn(true, `${S.classifier.length} видов (кэш)`);
     return true;
   } catch(e) {
@@ -449,32 +462,22 @@ function loadFromCache() {
 
 function saveToCache() {
   try {
-    const data = {
+    // Сохраняем без image_base64 — кэш всегда лёгкий
+    const light = S.classifier.map(r => ({...r, image_base64: ''}));
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
       timestamp: Date.now(),
-      classifier: S.classifier,
-    };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-    console.log('[cache] сохранён');
+      classifier: light,
+    }));
+    console.log('[cache] сохранён (без картинок)');
   } catch(e) {
-    // localStorage может быть переполнен — сохраним без image_base64
-    try {
-      const light = S.classifier.map(r => {
-        const copy = {...r};
-        delete copy.image_base64;
-        return copy;
-      });
-      localStorage.setItem(CACHE_KEY, JSON.stringify({timestamp: Date.now(), classifier: light}));
-      console.log('[cache] сохранён без картинок (переполнен)');
-    } catch(e2) {
-      console.warn('[cache] не удалось сохранить:', e2);
-    }
+    console.warn('[cache] не удалось сохранить:', e);
   }
 }
 
 /* ═══════════════════════════════════
    GRIST
 ═══════════════════════════════════ */
-let firstComponentsLoadDone = false; // флаг чтобы onRecords не дублировал первичную загрузку
+let firstComponentsLoadDone = false;
 
 function initGrist() {
   const t0 = performance.now();
@@ -486,11 +489,8 @@ function initGrist() {
   }
 
   grist.ready({ requiredAccess: 'full' });
-
-  // Сразу меняем статус с "Ожидание Grist…" чтобы пользователь видел подключение
   setConn(true, 'Загрузка…');
 
-  // onRecords — триггер ТОЛЬКО для последующих обновлений, не для первичной загрузки
   grist.onRecords(() => {
     if (firstComponentsLoadDone) loadComponents();
   });
@@ -502,12 +502,12 @@ function initGrist() {
     renderSidebar();
   });
 
-  // Кэш читаем отложенно — не блокирует первый рендер
+  // Мгновенный показ из кэша (отложенно)
   setTimeout(() => {
     if (loadFromCache()) renderAll();
   }, 0);
 
-  // Загрузка данных параллельно
+  // Параллельная загрузка
   Promise.all([
     loadClassifier(),
     loadComponents(),
@@ -536,7 +536,7 @@ async function loadClassifier() {
   if (typeof grist === 'undefined') return;
   const t0 = performance.now();
 
-  // docId — в фоне, не блокирует основную загрузку
+  // docId и токен — в фоне
   (async () => {
     try {
       if (grist.docApi.getDocName) S.docId = await grist.docApi.getDocName();
@@ -548,34 +548,131 @@ async function loadClassifier() {
         if (m) S.docId = m[1];
       } catch(e) {}
     }
+    try {
+      if (grist.docApi.getAccessToken) {
+        const tokenInfo = await grist.docApi.getAccessToken({ readOnly: true });
+        S.accessToken = tokenInfo.token;
+        S.tokenBaseUrl = tokenInfo.baseUrl;
+      }
+    } catch(e) {}
   })();
 
+  // Попытка 1 — лёгкая загрузка через SQL без image_base64 (если получится — быстрее в разы)
+  const light = await tryFetchClassifierLight();
+  if (light && light.length) {
+    S.classifier = light;
+    S.classifier.sort((a,b) => a.code.localeCompare(b.code, undefined, {numeric:true}));
+    console.log(`[ESKD_Classifier light SQL] ${S.classifier.length} за ${Math.round(performance.now()-t0)}мс`);
+    setConn(true, `${S.classifier.length} видов`);
+    setTimeout(saveToCache, 0);
+    renderAll();
+    // Картинки догружаем в фоне отдельным запросом
+    fetchAllImagesInBackground();
+    return;
+  }
+
+  // Попытка 2 — обычный fetchTable (полный, с картинками)
   try {
     const tables = await grist.docApi.listTables();
-    if (tables.includes('ESKD_Classifier')) {
-      const rows = await grist.docApi.fetchTable('ESKD_Classifier');
-      S.classifier = rowsToRecords(rows);
-      S.classifier.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-      console.log(`[ESKD_Classifier] ${S.classifier.length} за ${Math.round(performance.now()-t0)}мс`);
-      setTimeout(saveToCache, 0);
-      setConn(true, `${S.classifier.length} видов`);
-    } else {
+    if (!tables.includes('ESKD_Classifier')) {
       setConn(false, 'Таблица ESKD_Classifier не найдена');
+      return;
     }
+    const rows = await grist.docApi.fetchTable('ESKD_Classifier');
+    S.classifier = rowsToRecords(rows);
+    extractImages(S.classifier); // выделяем картинки в Map, очищаем в массиве
+    S.classifier.sort((a,b) => a.code.localeCompare(b.code, undefined, {numeric:true}));
+    console.log(`[ESKD_Classifier full] ${S.classifier.length} (${Object.keys(imagesByCode).length} картинок) за ${Math.round(performance.now()-t0)}мс`);
+    setConn(true, `${S.classifier.length} видов`);
+    setTimeout(saveToCache, 0);
+    renderAll();
   } catch(e) {
     setConn(false, 'Ошибка загрузки классификатора');
     console.error(e);
   }
-  renderAll();
 }
 
-/* Получить URL картинки уровня */
+/* Попытка лёгкой загрузки через SQL endpoint */
+async function tryFetchClassifierLight() {
+  // Ждём пока appear accessToken
+  for (let i = 0; i < 30 && !S.accessToken; i++) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (!S.accessToken || !S.tokenBaseUrl) return null;
+
+  try {
+    const sql = 'SELECT id, code, name, level, parent_code FROM ESKD_Classifier';
+    const url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&auth=${S.accessToken}`;
+    const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
+    if (!res.ok) {
+      console.warn(`[SQL] HTTP ${res.status} — fallback на fetchTable`);
+      return null;
+    }
+    const data = await res.json();
+    const records = data.records || [];
+    return records.map(r => ({
+      id: r.id,
+      code: r.fields?.code ?? r.code,
+      name: r.fields?.name ?? r.name,
+      level: r.fields?.level ?? r.level,
+      parent_code: r.fields?.parent_code ?? r.parent_code,
+    }));
+  } catch(e) {
+    console.warn('[SQL] не сработал:', e.message);
+    return null;
+  }
+}
+
+/* Догрузить все картинки в фоне (одним запросом) */
+async function fetchAllImagesInBackground() {
+  if (!S.accessToken || !S.tokenBaseUrl) return;
+  const t0 = performance.now();
+  try {
+    const sql = "SELECT code, image_base64 FROM ESKD_Classifier WHERE image_base64 != ''";
+    const url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&auth=${S.accessToken}`;
+    const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
+    if (!res.ok) return;
+    const data = await res.json();
+    (data.records || []).forEach(r => {
+      const code = r.fields?.code ?? r.code;
+      const img = r.fields?.image_base64 ?? r.image_base64;
+      if (code && img) imagesByCode[code] = img;
+    });
+    console.log(`[images bg] ${Object.keys(imagesByCode).length} картинок за ${Math.round(performance.now()-t0)}мс`);
+    // Если сейчас отображается summary с этой картинкой — обновим
+    renderBrowseSummary();
+  } catch(e) {
+    console.warn('[images bg] не сработали:', e.message);
+  }
+}
+
+/* Догрузить картинку для одного кода (если ещё нет) */
+async function fetchImageForCode(code) {
+  if (imagesByCode[code] !== undefined) return imagesByCode[code];
+  if (!S.accessToken || !S.tokenBaseUrl) return null;
+  try {
+    const sql = `SELECT image_base64 FROM ESKD_Classifier WHERE code = ?`;
+    const url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&args=${encodeURIComponent(JSON.stringify([code]))}&auth=${S.accessToken}`;
+    const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rec = (data.records || [])[0];
+    const img = rec?.fields?.image_base64 ?? rec?.image_base64 ?? '';
+    imagesByCode[code] = img;
+    return img;
+  } catch(e) {
+    return null;
+  }
+}
+
+/* Получить URL картинки уровня — из карты или асинхронной догрузкой */
 function getImageUrl(rec) {
   if (!rec) return null;
-  const b64 = rec.image_base64;
-  if (b64 && typeof b64 === 'string' && b64.length > 20) {
-    return b64;
-  }
+  // Сначала смотрим в Map (которую заполняет extractImages или фоновая догрузка)
+  const cached = imagesByCode[rec.code];
+  if (cached && cached.length > 20) return cached;
+  // Если в самой записи (для совместимости со старыми путями)
+  if (rec.image_base64 && rec.image_base64.length > 20) return rec.image_base64;
   return null;
 }
 
@@ -990,6 +1087,14 @@ function renderBrowseSummary() {
     }
     thumb.src = url;
     thumb.style.display = '';
+  } else if (curRec && S.accessToken && imagesByCode[cur.code] === undefined) {
+    // Картинка ещё не загружена — пробуем догрузить лениво
+    fetchImageForCode(cur.code).then(img => {
+      if (img && S.browsePath.length && S.browsePath[S.browsePath.length-1].code === cur.code) {
+        renderBrowseSummary(); // перерендерим если пользователь всё ещё на этом узле
+      }
+    });
+    if (thumb) thumb.remove();
   } else if (thumb) {
     thumb.remove();
   }
