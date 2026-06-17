@@ -257,7 +257,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 <!-- TOPBAR -->
 <header class="topbar">
   <span class="logo">ОК ЕСКД</span>
-  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.45</span>
+  <span style="font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;flex-shrink:0">v0.46</span>
   <div class="search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input class="search-input" id="searchInput" placeholder="Поиск по номеру, наименованию…" autocomplete="off">
@@ -567,20 +567,18 @@ async function loadClassifier() {
     await new Promise(r => setTimeout(r, 50));
   }
 
-  // Попытка 1 — ленивая загрузка: только классы верхнего уровня
-  if (S.accessToken && S.tokenBaseUrl) {
-    const classes = await fetchClassifierByParent(null);
-    if (classes && classes.length) {
-      S.classifierMode = 'lazy';
-      S.classifierLoadedParents = new Set(['']);
-      S.classifier = classes;
-      S.classifier.sort((a,b) => a.code.localeCompare(b.code, undefined, {numeric:true}));
-      console.log(`[ESKD_Classifier lazy] ${classes.length} классов за ${Math.round(performance.now()-t0)}мс`);
-      setConn(true, `${classes.length} классов`);
-      renderAll();
-      fetchAllImagesInBackground();
-      return;
-    }
+  // Попытка 1 — ленивая загрузка: только классы (SQL или fetchTable с фильтром)
+  const classes = await fetchClassifierByParent(null);
+  if (classes && classes.length) {
+    S.classifierMode = 'lazy';
+    S.classifierLoadedParents = new Set(['']);
+    S.classifier = classes;
+    S.classifier.sort((a,b) => a.code.localeCompare(b.code, undefined, {numeric:true}));
+    console.log(`[ESKD_Classifier lazy] ${classes.length} классов за ${Math.round(performance.now()-t0)}мс`);
+    setConn(true, `${classes.length} классов`);
+    renderAll();
+    fetchAllImagesInBackground();
+    return;
   }
 
   // Попытка 2 — SQL полный (без картинок)
@@ -650,29 +648,41 @@ async function tryFetchClassifierLight() {
   }
 }
 
-/* Загрузить записи по parent_code; null = верхний уровень (Классы) */
+/* Загрузить записи по parent_code; null = верхний уровень (Классы).
+   Вариант А: SQL с параметрами (кириллица через args).
+   Вариант Б: fetchTable с фильтром (если SQL недоступен). */
 async function fetchClassifierByParent(parentCode) {
-  if (!S.accessToken || !S.tokenBaseUrl) return null;
-  try {
-    let sql, url;
-    if (parentCode === null) {
-      sql = "SELECT id, code, name, level, parent_code FROM ESKD_Classifier WHERE level = 'Класс'";
-      url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&auth=${S.accessToken}`;
-    } else {
-      sql = 'SELECT id, code, name, level, parent_code FROM ESKD_Classifier WHERE parent_code = ?';
-      url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&args=${encodeURIComponent(JSON.stringify([parentCode]))}&auth=${S.accessToken}`;
-    }
-    const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return (data.records || []).map(r => ({
-      id: r.id,
-      code: r.fields?.code ?? r.code,
-      name: r.fields?.name ?? r.name,
-      level: r.fields?.level ?? r.level,
-      parent_code: r.fields?.parent_code ?? r.parent_code,
-    }));
-  } catch(e) { console.warn('[SQL lazy]', e.message); return null; }
+  // Вариант А: SQL (параметризованный — кириллица через args, не инлайн)
+  if (S.accessToken && S.tokenBaseUrl) {
+    try {
+      const sql = parentCode === null
+        ? 'SELECT id, code, name, level, parent_code FROM ESKD_Classifier WHERE level = ?'
+        : 'SELECT id, code, name, level, parent_code FROM ESKD_Classifier WHERE parent_code = ?';
+      const args = [parentCode === null ? 'Класс' : parentCode];
+      const url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&args=${encodeURIComponent(JSON.stringify(args))}&auth=${S.accessToken}`;
+      const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
+      if (res.ok) {
+        const data = await res.json();
+        const records = (data.records || []).map(r => ({
+          id: r.id, code: r.fields?.code ?? r.code, name: r.fields?.name ?? r.name,
+          level: r.fields?.level ?? r.level, parent_code: r.fields?.parent_code ?? r.parent_code,
+        }));
+        if (records.length) { console.log(`[SQL lazy] ${records.length} для '${parentCode}'`); return records; }
+      } else { console.warn(`[SQL lazy] HTTP ${res.status}`); }
+    } catch(e) { console.warn('[SQL lazy]', e.message); }
+  }
+
+  // Вариант Б: fetchTable с фильтром (без SQL)
+  if (typeof grist !== 'undefined') {
+    try {
+      const filter = parentCode === null ? { level: ['Класс'] } : { parent_code: [parentCode] };
+      const rows = await grist.docApi.fetchTable('ESKD_Classifier', { filters: filter });
+      const records = rowsToRecords(rows);
+      if (records.length) { console.log(`[fetchTable lazy] ${records.length} для '${parentCode}'`); return records; }
+    } catch(e) { console.warn('[fetchTable lazy]', e.message); }
+  }
+
+  return null;
 }
 
 /* Подгрузить детей узла если ещё не загружены */
@@ -708,8 +718,8 @@ async function searchClassifierKinds(q) {
   }
   try {
     const pattern = `%${q}%`;
-    const sql = "SELECT id, code, name, level, parent_code FROM ESKD_Classifier WHERE level = 'Вид' AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ?) LIMIT 30";
-    const url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&args=${encodeURIComponent(JSON.stringify([pattern, pattern]))}&auth=${S.accessToken}`;
+    const sql = 'SELECT id, code, name, level, parent_code FROM ESKD_Classifier WHERE level = ? AND (LOWER(code) LIKE ? OR LOWER(name) LIKE ?) LIMIT 30';
+    const url = `${S.tokenBaseUrl}/sql?q=${encodeURIComponent(sql)}&args=${encodeURIComponent(JSON.stringify(['Вид', pattern, pattern]))}&auth=${S.accessToken}`;
     const res = await fetch(url, { credentials: 'omit', mode: 'cors' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
