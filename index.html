@@ -177,14 +177,14 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 mark{background:var(--warn-bg);color:var(--warn);border-radius:4pt}
 
 /* ── REGISTERED TABLE ── */
-.reg-table{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.reg-table{width:100%;border-collapse:collapse;font-size:12px}
 .reg-table th{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tx3);padding:5px 8px;border-bottom:2px solid var(--brd);text-align:center;background:var(--surf2)}
 .reg-table th.group-header{border-bottom:2px solid var(--brd2);padding-bottom:2px;text-align:center}
-.reg-table .sub-header th{font-size:10px;color:var(--tx3);font-weight:500;padding:3px 8px;border-bottom:1px solid var(--brd);background:var(--surf2);text-align:center}
+.reg-table .sub-header th{font-size:10px;color:var(--tx3);font-weight:500;padding:3px 8px;border-bottom:1px solid var(--brd);background:var(--surf2);text-align:center;white-space:nowrap}
 .reg-table td{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:top;text-align:center}
 .reg-table tr:last-child td{border-bottom:none}
 .reg-table tr:hover td{background:var(--surf2)}
-.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc)}
+.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap}
 .reg-name{font-size:12px;color:var(--tx)}
 .reg-use-dn{font-family:var(--mono);font-size:11px;color:var(--tx3)}
 .reg-use-name{font-size:12px;color:var(--tx2)}
@@ -406,7 +406,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:4pt}
 </main>
 </div>
 
-<footer class="ver-footer">v0.61</footer>
+<footer class="ver-footer">v0.62</footer>
 
 <script>
 /* ═══════════════════════════════════
@@ -1470,11 +1470,11 @@ function renderRegistered() {
 
   body.innerHTML = `<table class="reg-table">
     <colgroup>
-      <col style="width:23.625%">
-      <col style="width:23.625%">
-      <col style="width:23.625%">
-      <col style="width:23.625%">
-      <col style="width:5.5%">
+      <col style="width:1%">
+      <col style="width:44%">
+      <col style="width:1%">
+      <col style="width:44%">
+      <col style="width:10%">
     </colgroup>
     <thead>
       <tr>
