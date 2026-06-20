@@ -111,7 +111,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .cls-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--brd);border-radius:var(--r);cursor:pointer;background:var(--surf);transition:border-color .15s,background .15s}
 .cls-row:hover{border-color:var(--brd2);background:var(--surf3)}
 .cls-row.sel{border-color:var(--acc);background:var(--acc-bg)}
-.cls-row-code{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--acc);flex-shrink:0;min-width:44px}
+.cls-row-code{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--tx);flex-shrink:0;min-width:44px}
 .cls-row-name{font-size:13px;color:var(--tx);flex:1;line-height:1.3}
 
 /* Подуровни — чуть компактнее */
@@ -119,7 +119,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .sub-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid var(--brd);border-radius:var(--r);cursor:pointer;background:var(--surf);transition:border-color .15s,background .15s}
 .sub-row:hover{border-color:var(--brd2);background:var(--surf3)}
 .sub-row.sel{border-color:var(--acc);background:var(--acc-bg)}
-.sub-row-code{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--acc);flex-shrink:0;min-width:56px}
+.sub-row-code{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--tx);flex-shrink:0;min-width:56px}
 .sub-row-name{font-size:12px;color:var(--tx);flex:1;line-height:1.3}
 
 /* ── FORM ── */
@@ -184,7 +184,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:4pt}
 .reg-table td{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:top;text-align:center}
 .reg-table tr:last-child td{border-bottom:none}
 .reg-table tr:hover td{background:var(--surf2)}
-.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap}
+.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap;vertical-align:middle}
 .reg-name{font-size:12px;color:var(--tx)}
 .reg-use-dn{font-family:var(--mono);font-size:11px;color:var(--tx3)}
 .reg-use-name{font-size:12px;color:var(--tx2)}
@@ -406,7 +406,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:4pt}
 </main>
 </div>
 
-<footer class="ver-footer">v0.62</footer>
+<footer class="ver-footer">v0.63</footer>
 
 <script>
 /* ═══════════════════════════════════
@@ -1483,9 +1483,9 @@ function renderRegistered() {
         <th rowspan="2" style="vertical-align:middle;text-align:center">Создан</th>
       </tr>
       <tr class="sub-header">
-        <th>Децимальный номер</th>
+        <th style="border-right:1px solid var(--brd)">Децимальный номер</th>
         <th style="border-right:1px solid var(--brd2)">Наименование</th>
-        <th>Децимальный номер</th>
+        <th style="border-right:1px solid var(--brd)">Децимальный номер</th>
         <th style="border-right:1px solid var(--brd2)">Наименование</th>
       </tr>
     </thead>
@@ -1576,9 +1576,9 @@ function renderRegistered() {
         }
 
         return `<tr>
-          <td class="reg-dn">${esc(c.decimal_number||'—')}</td>
+          <td class="reg-dn" style="border-right:1px solid var(--brd)">${esc(c.decimal_number||'—')}</td>
           <td class="editable-cell" style="border-right:1px solid var(--brd);text-align:left">${compNameCell}</td>
-          <td class="editable-cell">${dnCell}</td>
+          <td class="editable-cell" style="border-right:1px solid var(--brd)">${dnCell}</td>
           <td class="editable-cell" style="border-right:1px solid var(--brd)">${nameCell}</td>
           <td class="reg-author">
             <div class="avatar" data-tooltip="${esc(tooltipText)}" style="background:${author ? avatarColor(author) : 'var(--brd2)'}">${esc(initial)}</div>
