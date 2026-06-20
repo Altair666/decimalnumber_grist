@@ -101,7 +101,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 /* Путь выбора — шапка браузера */
 .browse-summary{padding:14px 16px;background:var(--surf);display:none;gap:16px;align-items:center;flex-direction:row}
 .browse-summary.on{display:flex}
-.bs-code{font-family:var(--mono);font-size:28px;font-weight:500;color:var(--acc);line-height:1;flex-shrink:0;text-align:center;min-width:120px}
+.bs-code{font-family:var(--mono);font-size:28px;font-weight:500;color:var(--tx);line-height:1;flex-shrink:0;text-align:center;min-width:120px}
 .bs-path{flex:1;min-width:0}
 .bs-row{font-size:15px;color:var(--tx);line-height:1.4}
 .bs-thumb{flex-shrink:0;max-height:300px;border:1px solid var(--brd);border-radius:var(--r);background:var(--surf2)}
@@ -184,7 +184,8 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:4pt}
 .reg-table td{padding:6px 8px;border-bottom:1px solid var(--brd);vertical-align:top;text-align:center}
 .reg-table tr:last-child td{border-bottom:none}
 .reg-table tr:hover td{background:var(--surf2)}
-.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap;vertical-align:middle}
+.reg-table td.reg-dn{vertical-align:middle}
+.reg-dn{font-family:var(--mono);font-size:11px;color:var(--acc);white-space:nowrap}
 .reg-name{font-size:12px;color:var(--tx)}
 .reg-use-dn{font-family:var(--mono);font-size:11px;color:var(--tx3)}
 .reg-use-name{font-size:12px;color:var(--tx2)}
@@ -406,7 +407,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:4pt}
 </main>
 </div>
 
-<footer class="ver-footer">v0.63</footer>
+<footer class="ver-footer">v0.64</footer>
 
 <script>
 /* ═══════════════════════════════════
