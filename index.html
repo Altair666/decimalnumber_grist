@@ -24,11 +24,11 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 
 /* ── LAYOUT ── */
 .app{display:grid;grid-template-columns:200px 1fr;grid-template-rows:44px 1fr;height:100vh;overflow:hidden}
-.topbar{grid-column:1/-1;background:var(--surf);border-bottom:1px solid var(--brd);display:flex;align-items:center;padding:0 12px;gap:10px}
-.tabbar{display:flex;gap:4px;height:100%;align-items:center}
-.tab-btn{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--tx2);background:transparent;border:none;border-radius:var(--r);padding:7px 14px;cursor:pointer;transition:background .1s,color .1s}
-.tab-btn:hover{background:var(--surf2);color:var(--tx)}
-.tab-btn.active{background:var(--acc-bg);color:var(--acc)}
+.topbar{grid-column:2;grid-row:1;background:var(--bg);border-bottom:1px solid var(--brd);display:flex;align-items:flex-end;padding:8px 12px 0}
+.tabbar{display:flex;gap:4px;align-items:flex-end}
+.tab-btn{font-family:var(--sans);font-size:12px;font-weight:500;color:var(--tx2);background:var(--surf2);border:1px solid var(--brd);border-bottom:1px solid var(--brd);border-radius:var(--r2) var(--r2) 0 0;padding:8px 18px;cursor:pointer;transition:background .1s,color .1s;margin-bottom:-1px}
+.tab-btn:hover{background:var(--surf3);color:var(--tx)}
+.tab-btn.active{background:var(--bg);color:var(--acc);border-bottom-color:var(--bg);font-weight:600;z-index:2}
 .search-wrap{flex:1;position:relative;max-width:380px}
 .search-wrap svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--tx3);pointer-events:none}
 .search-input{width:100%;height:30px;border:1px solid var(--brd);border-radius:var(--r);background:var(--surf2);padding:0 28px 0 30px;font-family:var(--sans);font-size:12px;color:var(--tx);outline:none;transition:border-color .15s,background .15s}
@@ -43,7 +43,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .ver-footer{position:fixed;right:10px;bottom:6px;font-family:var(--mono);font-size:10px;color:var(--tx3);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:1px 7px;z-index:10}
 
 /* ── SIDEBAR ── */
-.sidebar{background:var(--surf);border-right:1px solid var(--brd);overflow-y:auto;padding:10px 0;display:flex;flex-direction:column;gap:0}
+.sidebar{grid-column:1;grid-row:1/-1;background:var(--surf);border-right:1px solid var(--brd);overflow-y:auto;padding:10px 0;display:flex;flex-direction:column;gap:0}
 .sb-section{margin-bottom:12px}
 .sb-lbl{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--tx3);padding:0 12px 5px}
 .sb-item{display:flex;align-items:center;gap:7px;padding:4px 12px;cursor:pointer;transition:background .1s}
@@ -55,7 +55,7 @@ html,body{height:100%;overflow:hidden;font-family:var(--sans);font-size:13px;col
 .sb-divider{height:1px;background:var(--brd);margin:6px 12px}
 
 /* ── MAIN ── */
-.main{overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.main{grid-column:2;grid-row:2;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
 
 /* ── PANELS ── */
 .panel{background:var(--surf);border:1px solid var(--brd);border-radius:var(--r2);overflow:hidden}
@@ -405,7 +405,7 @@ mark{background:var(--warn-bg);color:var(--warn);border-radius:2px}
 </main>
 </div>
 
-<footer class="ver-footer">v0.49</footer>
+<footer class="ver-footer">v0.50</footer>
 
 <script>
 /* ═══════════════════════════════════
@@ -1081,15 +1081,46 @@ function renderSidebar() {
     : `<div style="padding:4px 12px;font-size:11px;color:var(--tx3)">—</div>`;
 }
 
-function goTo(id) {
+async function goTo(id) {
   const r = S.components.find(x => x.id === id);
   if (!r) return;
-  document.getElementById('searchInput').value = r.decimal_number;
-  S.searchQ = r.decimal_number;
-  document.getElementById('searchClear').className = 'search-clear on';
-  S.selResult = r;
   addRecent(r);
-  switchTab('structure');
+  if (S.activeTab === 'reg') {
+    await openKindForComponent(r);
+  } else {
+    document.getElementById('searchInput').value = r.decimal_number;
+    S.searchQ = r.decimal_number;
+    document.getElementById('searchClear').className = 'search-clear on';
+    S.selResult = r;
+    switchTab('structure');
+  }
+}
+
+/* На вкладке «Регистрация номера» клик по избранному/последнему открывает вид этого компонента в браузере классификатора */
+function extractKindCodeFromDN(dn) {
+  const parts = (dn || '').split('.');
+  for (let i = parts.length - 2; i >= 0; i--) {
+    if (/^\d{6}$/.test(parts[i])) return parts[i];
+  }
+  return null;
+}
+
+async function openKindForComponent(r) {
+  const code = extractKindCodeFromDN(r.decimal_number);
+  if (!code) return;
+  let kind = S.classifier.find(k => k.code === code && k.level === 'Вид');
+  if (!kind) {
+    kind = await fetchClassifierNodeByCode(code);
+    if (kind) {
+      const existingCodes = new Set(S.classifier.map(x => x.code));
+      if (!existingCodes.has(kind.code)) S.classifier.push(kind);
+    }
+  }
+  if (!kind) return;
+  pickKind(kind);
+  await buildPathForKind(kind);
+  renderBrowse();
+  renderRegistered();
 }
 
 /* ═══════════════════════════════════
